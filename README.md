@@ -9,3 +9,5 @@ Solving Advent of Code 2022 in Fortran
 03. Rucksack Reorganization
     - search for a repeated letter in strings
     - function `scan` has been really useful here
+04. Camp Cleanup
+    - fully or partialy overlaping interval pairs 
