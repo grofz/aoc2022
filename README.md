@@ -11,3 +11,6 @@ Solving Advent of Code 2022 in Fortran
     - function `scan` has been really useful here
 04. Camp Cleanup
     - fully or partialy overlaping interval pairs 
+05. Supply Stacks
+    - stacks reorganization
+    - using stack library modules `stack_mod` and `dll_mod`
