@@ -14,3 +14,6 @@ Solving Advent of Code 2022 in Fortran
 05. Supply Stacks
     - stacks reorganization
     - using stack library modules `stack_mod` and `dll_mod`
+06. Tuning Trouble
+    - search for duplicities in the stream of characters
+    - using trivial $O(N^2)$ comparison
