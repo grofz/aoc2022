@@ -17,3 +17,5 @@ Solving Advent of Code 2022 in Fortran
 06. Tuning Trouble
     - search for duplicities in the stream of characters
     - using trivial $O(N^2)$ comparison
+07. No Space Left On Device
+    - construct and query a file system
