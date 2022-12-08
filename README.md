@@ -19,3 +19,5 @@ Solving Advent of Code 2022 in Fortran
     - using trivial $O(N^2)$ comparison
 07. No Space Left On Device
     - construct and query a file system
+08. Treetop Tree House
+    - 3D-arrays, test rays of visibility in a tree map
