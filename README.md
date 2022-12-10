@@ -24,3 +24,5 @@ Solving Advent of Code 2022 in Fortran
 09. Rope Bridge
     - Simulate the movement of a rope
     - using parametrized derived type to differentiate between P1 and P2
+10. Cathode-Ray Tube
+    - simulate a graphic display
