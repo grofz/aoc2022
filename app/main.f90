@@ -10,9 +10,10 @@ program main_aoc2022
   use day2209_mod, only: day2209
   use day2210_mod, only: day2210
   use day2211_mod, only: day2211
+  use day2212_mod, only: day2212
   implicit none
 
-  goto 10
+  goto 11
   01 call day2201('inp/01/input.txt')
   02 call day2202('inp/02/input.txt')
   03 call day2203('inp/03/input.txt')
@@ -24,4 +25,5 @@ program main_aoc2022
   09 call day2209('inp/09/input.txt')
   10 call day2210('inp/10/input.txt')
   11 call day2211('inp/11/input.txt')
+  12 call day2212('inp/12/input.txt')
 end program main_aoc2022
