@@ -13,7 +13,7 @@ program main_aoc2022
   use day2212_mod, only: day2212
   implicit none
 
-  goto 11
+  goto 12
   01 call day2201('inp/01/input.txt')
   02 call day2202('inp/02/input.txt')
   03 call day2203('inp/03/input.txt')
