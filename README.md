@@ -26,3 +26,8 @@ Solving Advent of Code 2022 in Fortran
     - using parametrized derived type to differentiate between P1 and P2
 10. Cathode-Ray Tube
     - simulate a graphic display
+11. Monkey in the Middle
+    - moving object among monkeys
+12. Hill Climbing Algorithm
+    - search path to the top of the hill
+    - used Djikstra's search (not very original)

@@ -8,6 +8,7 @@ module day2212_mod
   type, extends(djikstra_node_at) :: state_t
     character(len=1), pointer :: h(:,:) => null()
     integer :: xy(2), tar(2)
+    logical :: ispart2 = .false.
   contains
     procedure :: nextngb, isequal, istarget
   end type
@@ -19,35 +20,36 @@ contains
 
     character(len=1), allocatable, target :: h(:,:)
     type(djikstra_node_ptr), allocatable :: wrk(:)
-    type(state_t) :: start, start0
-    integer :: ans1, i, j, ans0, ans2
+    type(state_t) :: start
+    integer :: ans1, i, ans2
 
-    !h = read_pattern('inp/12/test.txt')
     h = read_pattern(file)
     start%h => h
-    start%xy = findloc(h,'S')
-    h(start%xy(1),start%xy(2)) = 'a'
-    start%tar = findloc(h,'E')
-    h(start%tar(1),start%tar(2)) = 'z'
+    start%xy = findloc(h,'E')
+    h(start%xy(1),start%xy(2)) = 'z'
+    start%tar = findloc(h,'S')
+    h(start%tar(1),start%tar(2)) = 'a'
 
+    ! Part 1 - search from top to the start
+    start%ispart2 = .false.
     call djikstra_search(wrk, start, ans1)
     print '("Answer 12/1 ",i0,l2)', ans1, ans1==383
-    stop
 
-    ans2 = ans1
-    do i=1,size(h,1)
-    do j=1,size(h,2)
-      if (h(i,j)/='a') cycle
-      start0 = start
-      start0%xy = [i,j]
-      call djikstra_search(wrk, start0, ans0)
-      print *, i, j, ans0
-      if (ans0<ans2) ans2 = ans0
+    ! Part 2 - search from top to all positions
+    start%ispart2 = .true.
+    deallocate(wrk)
+    call djikstra_search(wrk, start, ans2)
+    do i=1,size(wrk)
+      select type(node=>wrk(i)%ptr)
+      class is (state_t)
+        ! select the position 'a' with a shortest path
+        if (h(node%xy(1),node%xy(2))=='a' .and. node%d < ans2) ans2 = node%d
+      end select
     end do
-    end do
-    print *, 'ans2 = ',ans2
+    print '("Answer 12/2 ",i0,l2)', ans2, ans2==377
 
   end subroutine day2212
+
 
   subroutine nextngb(node, flag, node_ngb, distance)
     class(state_t), intent(in) :: node
@@ -67,7 +69,7 @@ contains
         ! ignore out of map positions
         if (any(node_ngb%xy<1) .or. node_ngb%xy(1)>size(node%h,1) .or. node_ngb%xy(2)>size(node%h,2)) cycle
         ! ignore higher than one places
-        if (iachar(node%h(node_ngb%xy(1),node_ngb%xy(2))) > iachar(node%h(node%xy(1),node%xy(2)))+1 ) cycle
+        if (iachar(node%h(node_ngb%xy(1),node_ngb%xy(2))) < iachar(node%h(node%xy(1),node%xy(2)))-1 ) cycle
         ! position is possible
         exit
       end do
@@ -78,6 +80,7 @@ contains
       end if
     end select
   end subroutine
+
 
   logical function isequal(anode, bnode)
     class(state_t), intent(in) :: anode
@@ -91,8 +94,13 @@ contains
     end select
   end function
 
+  
   logical function istarget(node)
     class(state_t), intent(in) :: node
-    istarget = all(node%xy==node%tar)
+    if (node%ispart2) then
+      istarget = .false.
+    else
+      istarget = all(node%xy==node%tar)
+    end if
   end function
 end module day2212_mod
