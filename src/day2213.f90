@@ -17,29 +17,37 @@ contains
     character(len=*), intent(in) :: file
 
     type(string_t), allocatable :: lines(:)
-    type(token_t), pointer :: tokenA, tokenB
+    !type(token_t), pointer :: tokenA, tokenB
+    type(token_ptr), allocatable :: tokens(:)
+    integer, allocatable :: pos(:)
     integer :: ind, i, ipair, ans
+    integer :: ntokens, itoken
 
     lines = read_strings(file)
     !lines = read_strings('inp/13/test.txt')
 
-   !  ind = 1
-   !  call parse_tokens(lines(13)%str, ind, tokenA )
-   !  ind = 1
-   !  call parse_tokens(lines(14)%str, ind, tokenB )
-   !  call compare(tokenA, tokenB, ind)
-   !  print *, ind
-
-   !  stop
+    ntokens = 0
+    do i=1,size(lines)
+      if (len_trim(lines(i)%str) /= 0 ) ntokens = ntokens + 1
+    end do
+    allocate(tokens(ntokens+2))
+    allocate(pos(ntokens+2))
+    do i=1,size(pos)
+      pos(i) = i
+    end do
 
     ipair = 0
     ans = 0
+    itoken = 0
     do i=1,size(lines),3
       ind = 1
-      call parse_tokens(lines(i)%str, ind, tokenA )
+      !call parse_tokens(lines(i)%str, ind, tokenA )
+      call parse_tokens(lines(i)%str, ind, tokens(itoken+1)%ptr )
       ind = 1
-      call parse_tokens(lines(i+1)%str, ind, tokenB )
-      call compare(tokenA, tokenB, ind)
+      !call parse_tokens(lines(i+1)%str, ind, tokenB )
+      call parse_tokens(lines(i+1)%str, ind, tokens(itoken+2)%ptr )
+      !call compare(tokenA, tokenB, ind)
+      call compare(tokens(itoken+1)%ptr, tokens(itoken+2)%ptr, ind)
 
       ipair = ipair + 1
       print *, lines(i)%str
@@ -47,8 +55,23 @@ contains
       print *, ipair, ind
       print *
       if (ind==1) ans = ans + ipair
+      itoken = itoken + 2
     end do
-    print *, 'answer ', ans
+    print *, 'answer ', ans, ans==5806
+
+    ! Add two divisors
+    ind = 1
+    call parse_tokens('[[2]]', ind, tokens(ntokens+1)%ptr )
+    ind = 1
+    call parse_tokens('[[6]]', ind, tokens(ntokens+2)%ptr )
+    call sort(tokens, pos)
+
+    print *, 'after sort'
+    print *, pos
+    print *, 'div 2', findloc(pos, ntokens+1)
+    print *, 'div 6', findloc(pos, ntokens+2)
+    print *, 'ans =', findloc(pos, ntokens+1)*findloc(pos, ntokens+2)
+
 
   end subroutine day2213
 
@@ -185,6 +208,37 @@ contains
     else
       error stop 'impossible branch'
     end if
+  end subroutine
+
+
+  subroutine sort(tok, arr)
+    type(token_ptr), intent(in) :: tok(:)
+    integer, intent(inout) :: arr(:)
+
+    integer :: i, ires, itmp
+    logical :: swapped
+
+  print *, 'in bubble sort'
+    ! Bubble sort
+    do
+      swapped = .false.
+      do i=1, size(arr)-1
+        call compare(tok(arr(i))%ptr, tok(arr(i+1))%ptr, ires)
+        if (ires == 1) then
+          ! correct order
+        else if (ires == 2) then
+          ! swap
+          swapped = .true.
+          itmp = arr(i)
+          arr(i) = arr(i+1)
+          arr(i+1) = itmp
+        else
+          error stop 'sort - can not decide'
+        end if
+      end do
+      if (.not. swapped) exit
+    end do
+  print *, 'leaving bubble sort'
   end subroutine
 
 end module day2213_mod
