@@ -6,74 +6,82 @@ module day2213_mod
     logical :: is_list = .false.
     integer :: val
     type(token_ptr), allocatable :: list(:)
+  contains
+    procedure :: add => token_additem
   end type
+  interface token_t
+    module procedure token_newlist
+    module procedure token_newnumber
+  end interface
 
   type token_ptr
     type(token_t), pointer :: ptr
   end type
 
+  integer, parameter :: ORD_OK=1, ORD_REVERSE=2, ORD_UNKNOWN=3
+
 contains
+
   subroutine day2213(file)
     character(len=*), intent(in) :: file
 
     type(string_t), allocatable :: lines(:)
-    !type(token_t), pointer :: tokenA, tokenB
     type(token_ptr), allocatable :: tokens(:)
     integer, allocatable :: pos(:)
-    integer :: ind, i, ipair, ans
-    integer :: ntokens, itoken
+    integer :: ires, i, j, ipair, ans1, ans2, ntok
 
     lines = read_strings(file)
     !lines = read_strings('inp/13/test.txt')
 
-    ntokens = 0
+    ntok = 0
     do i=1,size(lines)
-      if (len_trim(lines(i)%str) /= 0 ) ntokens = ntokens + 1
+      if (len_trim(lines(i)%str) /= 0 ) ntok = ntok + 1
     end do
-    allocate(tokens(ntokens+2))
-    allocate(pos(ntokens+2))
+    allocate(tokens(ntok+2))
+    allocate(pos(ntok+2))
     do i=1,size(pos)
       pos(i) = i
     end do
 
     ipair = 0
-    ans = 0
-    itoken = 0
+    ans1 = 0
+    j = 0
     do i=1,size(lines),3
-      ind = 1
-      !call parse_tokens(lines(i)%str, ind, tokenA )
-      call parse_tokens(lines(i)%str, ind, tokens(itoken+1)%ptr )
-      ind = 1
-      !call parse_tokens(lines(i+1)%str, ind, tokenB )
-      call parse_tokens(lines(i+1)%str, ind, tokens(itoken+2)%ptr )
-      !call compare(tokenA, tokenB, ind)
-      call compare(tokens(itoken+1)%ptr, tokens(itoken+2)%ptr, ind)
-
       ipair = ipair + 1
-      print *, lines(i)%str
-      print *, lines(i+1)%str
-      print *, ipair, ind
-      print *
-      if (ind==1) ans = ans + ipair
-      itoken = itoken + 2
+      tokens(j+1) = str2token(lines(i)%str)
+      tokens(j+2) = str2token(lines(i+1)%str)
+      call compare(tokens(j+1)%ptr, tokens(j+2)%ptr, ires)
+      if (ires==ORD_OK) ans1 = ans1 + ipair
+      j = j + 2
     end do
-    print *, 'answer ', ans, ans==5806
+    print '("Answer 13/1 ",i0,l2)', ans1, ans1==5806
 
-    ! Add two divisors
-    ind = 1
-    call parse_tokens('[[2]]', ind, tokens(ntokens+1)%ptr )
-    ind = 1
-    call parse_tokens('[[6]]', ind, tokens(ntokens+2)%ptr )
+    ! Part2;  Add two divisors and sort
+    tokens(ntok+1) = str2token('[[2]]')
+    tokens(ntok+2) = str2token('[[6]]')
     call sort(tokens, pos)
+    ans2 = findloc(pos, ntok+1, 1)*findloc(pos, ntok+2, 1)
+    print *, 'div 2', findloc(pos, ntok+1)
+    print *, 'div 6', findloc(pos, ntok+2)
+    print '("Answer 13/2 ",i0,l2)', ans2, ans2==23600
 
-    print *, 'after sort'
-    print *, pos
-    print *, 'div 2', findloc(pos, ntokens+1)
-    print *, 'div 6', findloc(pos, ntokens+2)
-    print *, 'ans =', findloc(pos, ntokens+1)*findloc(pos, ntokens+2)
-
-
+    ! Free tokens
+    do i=1, size(tokens)
+      call token_free(tokens(i)%ptr)
+    end do
   end subroutine day2213
+
+
+  type(token_ptr) function str2token(str) result(new)
+    character(len=*), intent(in) :: str
+
+    integer :: ind
+    ind = 1
+    if (len(str)<2) error stop 'str2token - empty string'
+    if (str(1:1)/='[' .or. str(len(str):len(str))/=']') &
+      error stop 'str2token - string seems not complete'
+    call parse_tokens(str, ind, new%ptr)
+  end function str2token
 
 
   recursive subroutine parse_tokens(str, ind, new)
@@ -81,85 +89,75 @@ contains
     integer, intent(inout) :: ind
     type(token_t), intent(out), pointer :: new
 
-    integer :: iend, ind0
+    integer :: iend, ind0, tmp
     type(token_t), pointer :: new0
     type(token_ptr) :: new_ptr
 
     if (str(ind:ind)=='[') then
       ! is a list
-      new => new_token()
-      new%is_list = .true.
-      allocate(new%list(0))
-
+      new => token_t()
       ind0 = ind+1
       do 
         call parse_tokens(str, ind0, new0)
-        if (associated(new0)) then
-          new_ptr%ptr => new0
-          new%list = [new%list, new_ptr]
-        else
-          ! null list
-!         print *, 'null list', ind0
-        end if
+        call new%add(new0)
         if (str(ind0-1:ind0-1)==']') exit
-        if (ind0 > len_trim(str)) then
-          error stop 'unfinicshed...'
-        end if
+
+        if (ind0 > len_trim(str)) error stop 'parse_tokens - unfinicshed...'
       end do
       ind = ind0 + 1
-!print *, 'new list of items = ', size(new%list), 'next postion: ', ind
-!print *, '{'//str(ind:)//'}'
 
-    else if (str(ind:ind)==']') then ! empty list
-      nullify(new)
-      ind = ind + 1
-    
     else
-      ! is a number
+      ! is a number (or empty)
       iend = scan(str(ind:),',]')
       iend = ind + iend - 1
-      new => new_token()
-      if (iend>ind) then
-        new%is_list = .false.
-        read(str(ind:iend-1),*) new%val
+      if (iend<ind) error stop 'parse_tokens - null number'
+      if (iend==ind) then
+        ! empty string
+        new => null()
       else
-        error stop 'parse_tokens - null number'
+        read(str(ind:iend-1),*) tmp
+        new => token_t(tmp)
       end if
-
       ind = iend + 1
-!print *, 'new number = ', new%val, 'next postion: ', ind
-!print *, '{'//str(ind:)//'}'
     end if
+  end subroutine parse_tokens
 
-  end subroutine
 
-
-  function new_token() result(new)
+  function token_newnumber(val) result(new)
+    integer, intent(in) :: val
     type(token_t), pointer :: new
     allocate(new)
+    new%is_list = .false.
+    new%val = val
   end function
 
 
-  function new_token_list(val) result(new)
+  function token_newlist() result(new)
     type(token_t), pointer :: new
-    integer, intent(in) :: val
-
     allocate(new)
     new%is_list = .true.
-    allocate(new%list(1))
-    new%list(1)%ptr => new_token()
-    new%list(1)%ptr%is_list = .false.
-    new%list(1)%ptr%val = val
+    allocate(new%list(0))
   end function
+
+
+  subroutine token_additem(this, add)
+    class(token_t), intent(inout) :: this
+    type(token_t), pointer, intent(in) :: add
+
+    type(token_ptr) :: add_ptr
+
+    if (.not. associated(add)) return
+    add_ptr%ptr => add
+    this%list = [this%list, add_ptr]
+  end subroutine
 
 
   recursive subroutine compare(toka, tokb, ires)
     type(token_t), intent(in) :: toka, tokb
     integer, intent(out) :: ires 
-    ! 1=right order, 2=not right order, 3=not determined
 
     logical :: isa_list, isb_list
-    integer :: ind, ires0
+    integer :: ind
     type(token_t), pointer :: tmp_list
 
     isa_list = toka%is_list
@@ -171,44 +169,48 @@ contains
       ind = 1
       do
         if (size(toka%list)<ind .and. size(tokb%list)>=ind) then
-          ires = 1
+          ires = ORD_OK
           exit
         else if (size(tokb%list)<ind .and. size(toka%list)>=ind) then
-          ires = 2
+          ires = ORD_REVERSE
           exit
         else if (size(tokb%list)<ind .and. size(tokb%list)<ind) then
-          ires = 3
+          ires = ORD_UNKNOWN
           exit
         end if
-
-        call compare(toka%list(ind)%ptr, tokb%list(ind)%ptr, ires0)
-        ires = ires0
-        if (ires /= 3) exit
+        call compare(toka%list(ind)%ptr, tokb%list(ind)%ptr, ires)
+        if (ires /= ORD_UNKNOWN) exit
         ind = ind + 1
       end do
 
     else if (.not. isa_list .and. .not. isb_list) then
       ! both are numbers
       if (toka%val < tokb%val) then
-        ires = 1
+        ires = ORD_OK
       else if (toka%val > tokb%val) then
-        ires = 2
+        ires = ORD_REVERSE
       else
-        ires = 3
+        ires = ORD_UNKNOWN
       end if
 
     else if (isa_list .and. .not. isb_list) then
       ! list and number
-      tmp_list => new_token_list(tokb%val)
+      tmp_list => token_t()
+      call tmp_list%add(token_t(tokb%val))
       call compare(toka, tmp_list, ires)
+
     else if (isb_list .and. .not. isa_list) then
       ! number and list
-      tmp_list => new_token_list(toka%val)
+      tmp_list => token_t()
+      call tmp_list%add(token_t(toka%val))
       call compare(tmp_list, tokb, ires)
+
     else
-      error stop 'impossible branch'
+      error stop 'compare - impossible branch'
     end if
-  end subroutine
+
+    if (associated(tmp_list)) call token_free(tmp_list)
+  end subroutine compare
 
 
   subroutine sort(tok, arr)
@@ -218,15 +220,14 @@ contains
     integer :: i, ires, itmp
     logical :: swapped
 
-  print *, 'in bubble sort'
     ! Bubble sort
     do
       swapped = .false.
       do i=1, size(arr)-1
         call compare(tok(arr(i))%ptr, tok(arr(i+1))%ptr, ires)
-        if (ires == 1) then
+        if (ires == ORD_OK) then
           ! correct order
-        else if (ires == 2) then
+        else if (ires == ORD_REVERSE) then
           ! swap
           swapped = .true.
           itmp = arr(i)
@@ -238,7 +239,19 @@ contains
       end do
       if (.not. swapped) exit
     end do
-  print *, 'leaving bubble sort'
+  end subroutine sort
+
+
+  recursive subroutine token_free(this)
+    type(token_t), pointer, intent(inout) :: this
+    integer :: i
+    if (.not. associated(this)) return
+    if (this%is_list) then
+      do i=1,size(this%list)
+        call token_free(this%list(i)%ptr)
+      end do
+    end if
+    deallocate(this)
   end subroutine
 
 end module day2213_mod
