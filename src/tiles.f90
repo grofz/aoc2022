@@ -1,4 +1,5 @@
   module tiles_mod
+    use iso_fortran_env, only : int64
     implicit none
     private
     public operator(-)
@@ -250,11 +251,11 @@
     end subroutine
 
 
-    integer function tile_area(this) result(area)
+    integer(int64) function tile_area(this) result(area)
       class(tile_t), intent(in) :: this
 
-      area = (this%lim(1)%x(2)-this%lim(1)%x(1)+1)
-      area = (this%lim(2)%x(2)-this%lim(2)%x(1)+1) * area
+      area = int((this%lim(1)%x(2)-this%lim(1)%x(1)+1), kind=int64)
+      area = int(this%lim(2)%x(2)-this%lim(2)%x(1)+1, kind=int64) * area
     end function
 
   end module tiles_mod

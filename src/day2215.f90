@@ -19,20 +19,44 @@ contains
     character(len=*), intent(in) :: file
 
     type(sensor_t), allocatable :: ss(:)
-    type(tile_t), allocatable :: scover(:)
+    type(tile_t), allocatable :: scover(:), s1cover(:)
     type(tile_t) :: possible(1000)
     integer :: ns, lims(4), ans1, pbeacon(2)
-    integer(int64) :: ans2
-    integer :: ipos, pc(2,4), i
-    integer, parameter :: MAXV = 4000000
+    integer(int64) :: ans2, area
+    integer :: ipos, pc(2,4), i, j
+    integer, parameter :: MAXV = 4000000, YLINE=2000000
 
+    real :: t0, t1
+
+call cpu_time(t0)
     call read_input(file, ss, lims, scover)
     print *, 'limits: ',lims
 
-    ans1 = count_impossible(ss, lims(1:2), 2000000)
+    !ans1 = count_impossible(ss, lims(1:2), 2000000)
+
+    ! Alternative for Part 1 (using tiles_t made for Part 2)
+    ipos = 1
+    possible(ipos) = tile_t([lims(1),lims(2),YLINE, YLINE])
+    allocate(s1cover(size(ss)))
+    do i=1,size(ss)
+      associate (x1=>ss(i)%p(1)-(ss(i)%mdis-abs(YLINE-ss(i)%p(2))),&
+                 x2=>ss(i)%p(1)+(ss(i)%mdis-abs(YLINE-ss(i)%p(2))))
+        s1cover(i) = tile_t([x1, x2, YLINE, YLINE])
+      end associate
+    end do
+    call remove_covered(possible, ipos, s1cover)
+    area = lims(2)-lims(1)
+    do i=1,ipos
+      area = area - possible(i)%area()
+    end do
+    ans1 = area
     print '("Answer 15/1 ",i0,l2)', ans1, ans1==5564017
+call cpu_time(t1)
+print '("Part 1 took (seconds) ", f7.4)',t1-t0
+print *
 
     ! Part 2
+call cpu_time(t0)
     pc(:,1) = pos2new([0,0])
     pc(:,2) = pos2new([0,MAXV])
     pc(:,3) = pos2new([MAXV,0])
@@ -52,12 +76,11 @@ print *, 'Starting with ', possible(1)%lim(1)%x, possible(1)%lim(2)%x
                 y1=>possible(i)%lim(2)%x(1), &
                 y2=>possible(i)%lim(2)%x(2))
         if (possible(i)%area()/=1) cycle
-        print *, 'beacon found ?'
-        print *, possible(i)%area(), new2pos([x1,y1]), new2pos([x2,y2])
         if (.not. all(new2pos([x1,y1])<MAXV)) then
-          print *, '...not in range'
+          !print *, '...not in range'
         else
           print *, '...beacon is in range'
+          print *, possible(i)%area(), new2pos([x1,y1]), new2pos([x2,y2])
           pbeacon = new2pos([x1,y1])
         end if
       end associate
@@ -65,6 +88,24 @@ print *, 'Starting with ', possible(1)%lim(1)%x, possible(1)%lim(2)%x
     print '("Beacon position: ",i0,1x,i0)', pbeacon
     ans2 = pbeacon(1)*4000000_int64+pbeacon(2)
     print '("Answer 15/2 ",i0,l2)', ans2, ans2==11558423398893_int64
+call cpu_time(t1)
+print '("Part 2 took (seconds) ", f7.4)',t1-t0
+print *
+
+    ! Another aproach for Part 2
+    ! The beacon will be in a gap between two sensor area.
+    ! Find a pair of becons with one pixel gap betweem them.
+call cpu_time(t0)
+    do i=1,size(ss)-1
+    do j=i+1,size(ss)
+      if (manhattan(ss(i)%p, ss(j)%p)==ss(i)%mdis+ss(j)%mdis+2) then
+        print *, i, j, 'beacon can be between this pair'
+        call find_gap(ss(i),ss(j),ss)
+      end if
+    end do
+    end do
+call cpu_time(t1)
+print '("Part 2b took (seconds) ", f7.4)',t1-t0
   end subroutine day2215
 
 
@@ -73,8 +114,9 @@ print *, 'Starting with ', possible(1)%lim(1)%x, possible(1)%lim(2)%x
     integer, intent(inout) :: ipos
     type(tile_t), intent(in) :: scover(:)
 
-    integer :: i, j
+    integer :: i, j, k
     type(tile_t), allocatable :: tmp(:)
+    integer(int64) :: area
 
     do i=1,size(scover)
       j = 1
@@ -94,6 +136,12 @@ print *, 'Starting with ', possible(1)%lim(1)%x, possible(1)%lim(2)%x
         end if
         if (j>ipos) exit
       end do
+
+      area = 0
+      do k=1,ipos
+        area = area + possible(k)%area()
+      end do
+!print *, 'area = ',possible(1)%area()
     end do
   end subroutine
 
@@ -136,7 +184,7 @@ print *, 'Starting with ', possible(1)%lim(1)%x, possible(1)%lim(2)%x
 
     do i=1,ns
       if (.not. all(new2pos(pos2new(ss(i)%p))==ss(i)%p)) error stop 'read_input - transformation check fails'
-print *, 'scovered ',scover(i)%lim(1)%x, scover(i)%lim(2)%x
+!print *, 'scovered ',scover(i)%lim(1)%x, scover(i)%lim(2)%x
     end do
   end subroutine read_input
 
@@ -185,7 +233,7 @@ print *, 'scovered ',scover(i)%lim(1)%x, scover(i)%lim(2)%x
   end subroutine read_oneline
 
 
-  integer function manhattan(p1, p2) result(md)
+  pure integer function manhattan(p1, p2) result(md)
     integer, intent(in) :: p1(2), p2(2)
     md = sum(abs(p1-p2))
   end function
@@ -242,5 +290,37 @@ print *, 'scovered ',scover(i)%lim(1)%x, scover(i)%lim(2)%x
         error stop 'can not transform position back'
     end if
     pn = pn/2
+  end function
+
+
+  subroutine find_gap(a, b, ss)
+    type(sensor_t), intent(in) :: a, b
+    type(sensor_t), intent(in) :: ss(:)
+
+    integer :: x(2), y, k
+    do y=a%p(2)-a%mdis-1, a%p(2)+a%mdis+1
+      x(1) = a%p(1)-(a%mdis+1-abs(y-a%p(2)))
+      x(2) = a%p(1)+(a%mdis+1-abs(y-a%p(2)))
+      do k=1,2
+        if (manhattan([x(k),y],b%p)==b%mdis+1) then
+          if (.not. iscovered(x(k), y, ss)) print *, 'Beacon found ',x(k), y
+        end if
+      end do
+    end do
+  end subroutine
+
+  pure function iscovered(x0, y0, ss)
+    logical :: iscovered
+    integer, intent(in) :: x0, y0
+    type(sensor_t), intent(in) :: ss(:)
+
+    integer :: is
+    iscovered = .false.
+    do is=1,size(ss)
+      if (manhattan([x0,y0], ss(is)%p) <= ss(is)%mdis) then
+        iscovered = .true.
+        exit
+      end if
+    end do
   end function
 end module day2215_mod
