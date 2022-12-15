@@ -31,3 +31,6 @@ Solving Advent of Code 2022 in Fortran
 12. Hill Climbing Algorithm
     - search path to the top of the hill
     - used Djikstra's search (not very original)
+13.
+14.
+15.
