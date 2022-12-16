@@ -2,12 +2,17 @@ module day2216_mod
   use parse_mod, only : string_t, read_strings
   use djikstra_mod, only : djikstra_node_at, djikstra_node_ptr, djikstra_search
   implicit none
+  private
+  public day2216
 
-  integer, parameter :: MAXHASHVAL = 1000, MAX_PLAYERS=2
-  type, extends(djikstra_node_at)::  state_t
+  integer, parameter :: MAX_LETTERS=iachar('Z')-iachar('A')+1 
+  integer, parameter :: MAX_PLAYERS=2
+  integer, parameter :: DEADLINE_P1=30, DEADLINE_P2=26
+
+  type, extends(djikstra_node_at) ::  state_t
     integer :: t = 0
     integer :: gain = 0
-    logical :: opened(MAXHASHVAL) = .false.
+    logical :: opened(MAX_LETTERS**2) = .false.
     integer :: pos(MAX_PLAYERS)
     integer :: trg(MAX_PLAYERS) = 0
     integer :: eta(MAX_PLAYERS)
@@ -25,21 +30,20 @@ module day2216_mod
     procedure :: moveto => state_moveto
     procedure :: onestep => state_onestep
     procedure :: print => state_print
-    procedure :: wait => state_wait
   end type state_t
 
-  integer, parameter :: DEADLINE_P1=30, DEADLINE_P2=26
+  integer, save :: counter_for_stat = 0
+
 contains
 
   subroutine day2216(file)
     character(len=*), intent(in) :: file
 
-
     integer, target :: aa(hash('ZZ'),hash('ZZ'))
     integer, target :: dmap(hash('ZZ'),hash('ZZ'))
     character(len=2), target :: label(hash('ZZ'))
     integer, target :: rate(hash('ZZ'))
-    type(state_t) :: init, sout
+    type(state_t) :: init
     type(djikstra_node_ptr), allocatable :: dwrk(:)
     integer :: i, itmp, j, ans1, ans2
     integer, allocatable :: inext(:)
@@ -83,15 +87,19 @@ contains
     ! Part 1
     init%deadline = DEADLINE_P1
     init%nc = 1
+    counter_for_stat = 0
     call move(init, ans1)
     print '("Answer 16/1 ",i0,l2)', ans1, ans1==2359
+  print *, 'paths evaluated ',counter_for_stat
 
     ! Part 2
+    counter_for_stat = 0
     init%deadline = DEADLINE_P2
     init%nc = 2
     call move(init, ans2)
     print '("Answer 16/2 ",i0,l2)', ans2, ans2==2999
-  end subroutine
+print *, 'paths evaluated ',counter_for_stat
+  end subroutine day2216
 
 
   recursive subroutine move(s, cost)
@@ -99,76 +107,69 @@ contains
     integer, intent(out) :: cost
 
     integer, allocatable :: imov1(:), imov2(:)
-    integer :: i, ii, cost0, ichildren
+    integer :: i1, i2, n1, n2, cost0
     type(state_t) :: s0, s1
     logical :: isirq
 
-    ichildren = 0
-    cost = 0
-
-    ! Simulate until decision must be made
+    ! Target valve was selected before the recursive call.
+    ! Now simulate until a next decision can be made.
+    cost = -1
     s0 = s
     do
       if (s0%t >= s0%deadline) exit
-      call s0%onestep(isirq)
+      call s0%onestep(.false., isirq)
       if (isirq) exit
     end do
-    if (s0%t==s0%deadline) goto 100
 
-    ! Make several choices for each player who must decide
+    ! Opening valve in the last minute makes no difference
+    if (s0%t>=s0%deadline-1) goto 100
+
+    ! Suggest best moves for each player who must decide
     allocate(imov1(0), imov2(0))
     if (s0%trg(1)==0) imov1 = next_to_open(s0,1)
     if (s0%nc>1) then
       if (s0%trg(2)==0) imov2 = next_to_open(s0,2)
     end if
 
-    ! Three different loops
-    ! - depending whether both players or just one player
-    !   have choosen next move (TODO jak to zlepsit?)
-    if (size(imov2)==0 .and. size(imov1)/=0) then
-      do i=1, size(imov1)
-        s1 = s0  
-        call s1%moveto(imov1(i),1)
-        call move(s1, cost0)
-        ichildren = ichildren + 1
-        if (cost0 > cost) cost = cost0
-      end do
+    ! Three cases must be resolved: 
+    ! Player 1, player 2 or both players are choosing. 
+    ! Loops start with index "0" to allow for at least one pass
+    ! in a situation when either "n1" or "n2" are zero.
+    n1 = size(imov1)
+    n2 = size(imov2)
+    OUT: do i1 = 0, n1
+      INN: do i2 = 0, n2
+        if (n1/=0 .and. n2/=0) then
+          ! negate "0" as a starting index if both players choosing
+          if (i1==0 .or. i2==0) cycle
+          ! avoid both players choosing the same valve
+          if (imov2(i2)==imov1(i1)) cycle
+        else
+          ! at least one player must choose
+          if (i1==0 .and. i2==0) cycle
+        end if
 
-    else if (size(imov1)==0 .and. size(imov2)/=0) then
-      do i=1, size(imov2)
-        s1 = s0  
-        call s1%moveto(imov2(i),2)
+        ! Make a choice and recursively call itself
+        s1 = s0
+        if (i1/=0) call s1%moveto(imov1(i1),1)
+        if (i2/=0) call s1%moveto(imov2(i2),2)
         call move(s1, cost0)
-        ichildren = ichildren + 1
-        if (cost0 > cost) cost = cost0
-      end do
-    
-    else
-      do i=1, size(imov1)
-      do ii=1, size(imov2)
-        if (imov2(ii)==imov1(i)) cycle
-        s1 = s0  
-        call s1%moveto(imov1(i),1)
-        call s1%moveto(imov2(ii),2)
-        call move(s1, cost0)
-        ichildren = ichildren + 1
-        if (cost0 > cost) cost = cost0
-      end do
-      end do
-    end if
 
-    ! One player has no more choices, but the second one
-    ! is still moving
-    if (ichildren==0 .and. any(s0%trg(1:s0%nc)/=0)) then
-      call move(s0, cost0)
-      if (cost0 > cost) cost = cost0
-      ichildren = 1
-    end if
+        ! Keep only the best output to be returned
+        if (cost0 > cost) cost = cost0
+      end do INN 
+    end do OUT
 
-    100 if (ichildren==0) then
-      ! wait until deadline and report the actual state
-      call s0%wait(s%deadline-s0%t)
+    ! If no more choices were possible just simulate till the end
+    ! and report the result
+    100 if (cost==-1) then
+      do
+        if (s0%t >= s0%deadline) exit
+        call s0%onestep(.true., isirq)
+        if (isirq .and. s0%t<s0%deadline) error stop 'move - no more choices expected'
+      end do
       cost = s0%gain
+      counter_for_stat = counter_for_stat + 1
     endif
   end subroutine move
 
@@ -223,10 +224,11 @@ contains
   end subroutine
 
 
-  pure integer function hash(str)
+  pure integer function hash(str) result(h)
     character(len=2), intent(in) :: str
-    hash = (iachar(str(1:1))-iachar('A')+1)*30
-    hash = iachar(str(2:2))-iachar('A')+1+hash
+    h = 1
+    h = h + (iachar(str(1:1))-iachar('A')) * MAX_LETTERS
+    h = h + (iachar(str(2:2))-iachar('A'))
   end function hash
 
 
@@ -236,55 +238,54 @@ contains
     class(djikstra_node_at), intent(out), allocatable :: node_ngb
     integer, intent(out) :: distance
 
-    integer :: i
-
     if (.not. associated(node%aa)) error stop 'incidence matrix not associated'
     distance = 1
-    i = flag
     allocate(node_ngb, source=node)
     select type (node_ngb)
     class is (state_t)
       do
-        i = i + 1
-        if (i > size(node%aa, 2)) then
+        flag = flag + 1
+        if (flag > size(node%aa, 2)) then
           flag = 0
           exit 
         end if
-        if (node%aa(node%pos(1), i) /= 1) cycle
+        if (node%aa(node%pos(1), flag) /= 1) cycle
         ! ngb found
-        node_ngb%pos = i
-        flag = i
+        node_ngb%pos = flag
         exit
       end do
     end select
   end subroutine
 
-  logical function state_isequal(anode, bnode) result(isequal)
+
+  pure logical function state_isequal(anode, bnode) result(isequal)
     class(state_t), intent(in) :: anode
     class(djikstra_node_at), intent(in) :: bnode
     select type(bnode)
     class is (state_t)
-      isequal = anode%pos(1)==bnode%pos(1)
+      isequal = all(anode%pos==bnode%pos)
     end select
   end function
 
-  logical function state_istarget(node)
+
+  pure logical function state_istarget(node)
     class(state_t), intent(in) :: node
     state_istarget = .false.
   end function
 
 
-  subroutine state_onestep(this, isirq)
+  pure subroutine state_onestep(this, force, isirq)
     class(state_t), intent(inout) :: this
+    logical, intent(in) :: force
     logical, intent(out) :: isirq
 
     integer :: k
 
     if (.not. associated(this%rate)) error stop 'open - rate pointer not associated'
 
-    if (all(this%trg(1:this%nc)==0)) then
-      ! when called from the root instance - no targets have been
-      ! yet defined
+    if (all(this%trg(1:this%nc)==0) .and. .not. force) then
+      ! Do nothing when called from the root instance:
+      ! no targets have been yet defined
       isirq = .true.
       return
     end if
@@ -293,7 +294,6 @@ contains
     isirq = .false.
     this%t = this%t + 1
     this%gain = this%gain + this%flow
-!call this%print()
 
     do k=1,this%nc
       if (this%trg(k)==0) cycle
@@ -315,7 +315,7 @@ contains
   end subroutine state_onestep
 
 
-  subroutine state_moveto(this, ito, ik)
+  pure subroutine state_moveto(this, ito, ik)
     class(state_t), intent(inout) :: this
     integer, intent(in) :: ito, ik
 
@@ -330,20 +330,6 @@ contains
       this%eta(ik) = d
     end associate
   end subroutine state_moveto
-
-
-  subroutine state_wait(this, i)
-    class(state_t), intent(inout) :: this
-    integer, intent(in) :: i
-
-    if (i==0) return
-    if (any(this%trg(1:this%nc)/=0)) then
-      call this%print()
-      error stop 'wait - there are still moving'
-    end if
-    this%t = this%t + i
-    this%gain = this%gain + i*this%flow
-  end subroutine
 
 
   subroutine state_print(th)
@@ -365,18 +351,17 @@ contains
   end subroutine state_print
 
 
-  function next_to_open(th, ik) result(pos)
+  pure function next_to_open(th, ik) result(pos)
     integer, allocatable :: pos(:)
     class(state_t), intent(in) :: th 
     integer, intent(in) :: ik
-
-    ! Greedy algorithm - present three best choices for the
-    ! next valve to open
+!
+! Greedy algorithm:
+! present three best choices for the next valve to open
+!
     integer, parameter :: NSEL = 3
-
     integer :: i, n, pos0(NSEL)
     real :: val(size(th%rate))
-    real :: mx
 
     if (ik>th%nc) error stop 'next_to_open - invalid ik'
     if (.not. associated(th%rate)) error stop 'next_to_open - rate pointer not associated'
@@ -387,13 +372,12 @@ contains
       ! no point to consider opened or stuck valves
       if (th%label(i)=='  ') cycle
       if (th%opened(i) .or. th%rate(i)==0) cycle
-      ! valve already taken
+      ! valve already taken by another player
       if (any(th%trg(1:th%nc)==i)) cycle
 
       associate(d=>th%dmap(th%pos(ik), i))
         if (d<1) error stop 'next_to_open - dmap value is not trusted'
         val(i) = real(th%rate(i))/real(d+1) 
-!  print *, th%label(i), val(i)
       end associate
     end do
 
@@ -406,7 +390,6 @@ contains
     end do
     allocate(pos(n))
     pos = pos0(1:n)
-!print *, 'result =', pos
+  end function next_to_open
 
-  end function
 end module day2216_mod
