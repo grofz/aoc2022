@@ -3,13 +3,17 @@ module day2216_mod
   use djikstra_mod, only : djikstra_node_at, djikstra_node_ptr, djikstra_search
   implicit none
 
-  integer, parameter :: MAXHASHVAL = 1000
+  integer, parameter :: MAXHASHVAL = 1000, MAX_PLAYERS=2
   type, extends(djikstra_node_at)::  state_t
     integer :: t = 0
     integer :: gain = 0
     logical :: opened(MAXHASHVAL) = .false.
-    integer :: pos
+    integer :: pos(MAX_PLAYERS)
+    integer :: trg(MAX_PLAYERS) = 0
+    integer :: eta(MAX_PLAYERS)
     integer :: flow = 0
+    integer :: deadline = -1
+    integer :: nc = -1
     integer, pointer :: aa(:,:) => null()
     integer, pointer :: dmap(:,:) => null()
     integer, pointer :: rate(:) => null()
@@ -19,10 +23,12 @@ module day2216_mod
     procedure :: isequal => state_isequal
     procedure :: nextngb => state_nextngb
     procedure :: moveto => state_moveto
-    procedure :: open => state_open
+    procedure :: onestep => state_onestep
     procedure :: print => state_print
     procedure :: wait => state_wait
   end type state_t
+
+  integer, parameter :: DEADLINE_P1=30, DEADLINE_P2=26
 contains
 
   subroutine day2216(file)
@@ -35,17 +41,17 @@ contains
     integer, target :: rate(hash('ZZ'))
     type(state_t) :: init, sout
     type(djikstra_node_ptr), allocatable :: dwrk(:)
-    integer :: i, itmp, j, ans
+    integer :: i, itmp, j, ans1, ans2
     integer, allocatable :: inext(:)
 
     call read_input(file, aa, rate, label)
     !call read_input('inp/16/test.txt', aa, rate, label)
-
-    ! Create distance map
-    dmap = -1
     init%aa => aa
     init%rate => rate
     init%label => label
+
+    ! Create distance map
+    dmap = -1
     do i=1,size(label)
       if (label(i)=='  ') cycle
       init%pos = i
@@ -58,6 +64,7 @@ contains
         end select
       end do
     end do
+    init%dmap => dmap
 
     ! Print dmap
     do i=1, size(label)
@@ -69,37 +76,21 @@ contains
       end do
       write(*,*)
     end do
-    init%dmap => dmap
 
     ! set initial position
     init%pos = findloc(label,'AA',1)
-call init%print()
 
-goto 100
-inext = next_to_open(init)
-print *, label(inext(1)), label(inext(2))
-    call init%moveto(findloc(label,'DD',1))
-    call init%open()
-inext = next_to_open(init)
-print *, label(inext(1)), label(inext(2))
-    call init%moveto(findloc(label,'BB',1))
-    call init%open()
-    call init%moveto(findloc(label,'JJ',1))
-    call init%open()
-    call init%moveto(findloc(label,'HH',1))
-    call init%open()
-    call init%moveto(findloc(label,'EE',1))
-    call init%open()
-    call init%moveto(findloc(label,'CC',1))
-    call init%open()
-call init%print()
-    call init%wait(6)
-call init%print()
+    ! Part 1
+    init%deadline = DEADLINE_P1
+    init%nc = 1
+    call move(init, ans1)
+    print '("Answer 16/1 ",i0,l2)', ans1, ans1==2359
 
-stop
-100 continue
-    call move(init, ans)
-  print *, ans, ans==2359
+    ! Part 2
+    init%deadline = DEADLINE_P2
+    init%nc = 2
+    call move(init, ans2)
+    print '("Answer 16/2 ",i0,l2)', ans2, ans2==2999
   end subroutine
 
 
@@ -107,28 +98,76 @@ stop
     type(state_t), intent(in) :: s
     integer, intent(out) :: cost
 
-    integer, allocatable :: imov(:)
-    integer :: i, cost0, ichildren
-    type(state_t) :: s0
+    integer, allocatable :: imov1(:), imov2(:)
+    integer :: i, ii, cost0, ichildren
+    type(state_t) :: s0, s1
+    logical :: isirq
 
-    imov = next_to_open(s)
     ichildren = 0
     cost = 0
-    do i=1, size(imov)
-      s0 = s  
-      call s0%moveto(imov(i))
-      call s0%open()
-      if (s0%t <= 30) then
-        call move(s0, cost0)
+
+    ! Simulate until decision must be made
+    s0 = s
+    do
+      if (s0%t >= s0%deadline) exit
+      call s0%onestep(isirq)
+      if (isirq) exit
+    end do
+    if (s0%t==s0%deadline) goto 100
+
+    ! Make several choices for each player who must decide
+    allocate(imov1(0), imov2(0))
+    if (s0%trg(1)==0) imov1 = next_to_open(s0,1)
+    if (s0%nc>1) then
+      if (s0%trg(2)==0) imov2 = next_to_open(s0,2)
+    end if
+
+    ! Three different loops
+    ! - depending whether both players or just one player
+    !   have choosen next move (TODO jak to zlepsit?)
+    if (size(imov2)==0 .and. size(imov1)/=0) then
+      do i=1, size(imov1)
+        s1 = s0  
+        call s1%moveto(imov1(i),1)
+        call move(s1, cost0)
         ichildren = ichildren + 1
         if (cost0 > cost) cost = cost0
-      end if
-    end do
+      end do
 
-    if (ichildren==0) then
+    else if (size(imov1)==0 .and. size(imov2)/=0) then
+      do i=1, size(imov2)
+        s1 = s0  
+        call s1%moveto(imov2(i),2)
+        call move(s1, cost0)
+        ichildren = ichildren + 1
+        if (cost0 > cost) cost = cost0
+      end do
+    
+    else
+      do i=1, size(imov1)
+      do ii=1, size(imov2)
+        if (imov2(ii)==imov1(i)) cycle
+        s1 = s0  
+        call s1%moveto(imov1(i),1)
+        call s1%moveto(imov2(ii),2)
+        call move(s1, cost0)
+        ichildren = ichildren + 1
+        if (cost0 > cost) cost = cost0
+      end do
+      end do
+    end if
+
+    ! One player has no more choices, but the second one
+    ! is still moving
+    if (ichildren==0 .and. any(s0%trg(1:s0%nc)/=0)) then
+      call move(s0, cost0)
+      if (cost0 > cost) cost = cost0
+      ichildren = 1
+    end if
+
+    100 if (ichildren==0) then
       ! wait until deadline and report the actual state
-      s0 = s
-      call s0%wait(30-s%t)
+      call s0%wait(s%deadline-s0%t)
       cost = s0%gain
     endif
   end subroutine move
@@ -161,7 +200,7 @@ stop
       j0 = j0 + 5
       j1 = scan(lines(i)%str, ';') 
       read(lines(i)%str(j0:j1-1),*) rate(ind_valve)
-  print *, 'Valve: ', valve, ind_valve, rate(ind_valve)
+! print *, 'Valve: ', valve, ind_valve, rate(ind_valve)
 
       j0 = index(lines(i)%str, 'valves')
       j0 = j0 + 7
@@ -176,7 +215,7 @@ stop
         ind_valve0 = hash(valve0)
         aa(ind_valve,ind_valve0) = 1
         aa(ind_valve0,ind_valve) = 1
-  print *, '-->',valve0, ind_valve0
+! print *, '-->',valve0, ind_valve0
         j0 = j1+3
         if (j0>len_trim(lines(i)%str)) exit NGB
       end do NGB
@@ -211,7 +250,7 @@ stop
           flag = 0
           exit 
         end if
-        if (node%aa(node%pos, i) /= 1) cycle
+        if (node%aa(node%pos(1), i) /= 1) cycle
         ! ngb found
         node_ngb%pos = i
         flag = i
@@ -225,7 +264,7 @@ stop
     class(djikstra_node_at), intent(in) :: bnode
     select type(bnode)
     class is (state_t)
-      isequal = anode%pos==bnode%pos
+      isequal = anode%pos(1)==bnode%pos(1)
     end select
   end function
 
@@ -235,30 +274,60 @@ stop
   end function
 
 
-  subroutine state_open(this)
+  subroutine state_onestep(this, isirq)
     class(state_t), intent(inout) :: this
+    logical, intent(out) :: isirq
+
+    integer :: k
 
     if (.not. associated(this%rate)) error stop 'open - rate pointer not associated'
-    if (this%opened(this%pos) .or. this%rate(this%pos)==0) &
-      error stop 'open - valve already opened or stuck'
+
+    if (all(this%trg(1:this%nc)==0)) then
+      ! when called from the root instance - no targets have been
+      ! yet defined
+      isirq = .true.
+      return
+    end if
+
+    ! Update time
+    isirq = .false.
     this%t = this%t + 1
     this%gain = this%gain + this%flow
-    this%opened(this%pos) = .true.
-    this%flow = this%flow + this%rate(this%pos)
-  end subroutine state_open
+!call this%print()
+
+    do k=1,this%nc
+      if (this%trg(k)==0) cycle
+      if (this%eta(k)==0) then
+        ! arrived - open the gate
+        if (this%opened(this%trg(k)) .or. this%rate(this%trg(k))==0) &
+          error stop 'open - valve already opened or stuck'
+        if (count(this%trg==this%trg(k))/=1) error stop 'open - more than one plaer targeting same valve'
+        this%opened(this%trg(k)) = .true.
+        this%flow = this%flow + this%rate(this%trg(k))
+        this%pos(k) = this%trg(k)
+        this%trg(k) = 0
+        isirq = .true.
+      else
+        ! still moving
+        this%eta(k) = this%eta(k) - 1
+      end if
+    end do
+  end subroutine state_onestep
 
 
-  subroutine state_moveto(this, ito)
+  subroutine state_moveto(this, ito, ik)
     class(state_t), intent(inout) :: this
-    integer, intent(in) :: ito
+    integer, intent(in) :: ito, ik
 
+    if (ik > this%nc) error stop 'moveto - invalid ik'
     if (.not. associated(this%dmap)) error stop 'moveto - dmap pointer not associated'
-    if (ito==this%pos) error stop 'moveto - already here'
-    associate(d=>this%dmap(this%pos, ito))
+    if (ito==this%pos(ik)) error stop 'moveto - already here'
+    if (this%opened(ito)) error stop 'moveto - target already opened'
+    if (any(this%trg==ito)) error stop 'moveto - target already taken by other player'
+    associate(d=>this%dmap(this%pos(ik), ito))
       if (d<1) error stop 'moveto - dmap value is not trusted'
-      this%pos = ito
-      this%t = this%t + d
-      this%gain = this%gain + d*this%flow
+      this%trg(ik) = ito
+      this%eta(ik) = d
     end associate
   end subroutine state_moveto
 
@@ -266,6 +335,12 @@ stop
   subroutine state_wait(this, i)
     class(state_t), intent(inout) :: this
     integer, intent(in) :: i
+
+    if (i==0) return
+    if (any(this%trg(1:this%nc)/=0)) then
+      call this%print()
+      error stop 'wait - there are still moving'
+    end if
     this%t = this%t + i
     this%gain = this%gain + i*this%flow
   end subroutine
@@ -274,28 +349,48 @@ stop
   subroutine state_print(th)
     class(state_t), intent(in) :: th
 
-    write(*,'("t= ",i2," f=",i3," g=",i5," at ",a2)') &
-      th%t, th%flow, th%gain, th%label(th%pos)
+    write(*,'("t= ",i2," f=",i3," g=",i5," at ",a2,"/",a2, " trg ",a2,"/",a2," eta=",i2,"/",i2)') &
+      th%t, th%flow, th%gain, safe_label(th%pos(1)), safe_label(th%pos(2)), &
+      safe_label(th%trg(1)), safe_label(th%trg(2)), th%eta
+  contains
+    function safe_label(i)
+      integer, intent(in) :: i
+      character(len=2) :: safe_label
+      if (i<1 .or. i>size(th%label)) then
+        safe_label='??'
+      else
+        safe_label=th%label(i)
+      end if
+    end function
   end subroutine state_print
 
 
-  function next_to_open(th) result(pos)
+  function next_to_open(th, ik) result(pos)
     integer, allocatable :: pos(:)
     class(state_t), intent(in) :: th 
-integer, parameter :: NSEL = 3
+    integer, intent(in) :: ik
+
+    ! Greedy algorithm - present three best choices for the
+    ! next valve to open
+    integer, parameter :: NSEL = 3
 
     integer :: i, n, pos0(NSEL)
     real :: val(size(th%rate))
     real :: mx
 
+    if (ik>th%nc) error stop 'next_to_open - invalid ik'
     if (.not. associated(th%rate)) error stop 'next_to_open - rate pointer not associated'
     if (.not. associated(th%dmap)) error stop 'next_to_open - rate pointer not associated'
+
     val = 0.0
     do i=1, size(val)
       ! no point to consider opened or stuck valves
       if (th%label(i)=='  ') cycle
       if (th%opened(i) .or. th%rate(i)==0) cycle
-      associate(d=>th%dmap(th%pos, i))
+      ! valve already taken
+      if (any(th%trg(1:th%nc)==i)) cycle
+
+      associate(d=>th%dmap(th%pos(ik), i))
         if (d<1) error stop 'next_to_open - dmap value is not trusted'
         val(i) = real(th%rate(i))/real(d+1) 
 !  print *, th%label(i), val(i)

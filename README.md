@@ -31,6 +31,16 @@ Solving Advent of Code 2022 in Fortran
 12. Hill Climbing Algorithm
     - search path to the top of the hill
     - used Djikstra's search (not very original)
-13.
-14.
-15.
+13. Distress Signal
+    - parse and compare expressions [1,[2,3],[]]
+    - structure with an array of pointers
+14. Regolith Reservoir
+    - simulate flow of sand particles
+    - just a character(1) array to store the situation
+15. Beacon Exclusion Zone
+    - partition 4M x 4M by diamond tiles
+    - class for subtracting squares
+    - but a more simple, geometrical solution exists
+16. Proboscidea Volcanium
+    - optimize the order of closing valves
+    - recursive search / greedy algorithm to pick three best moves
