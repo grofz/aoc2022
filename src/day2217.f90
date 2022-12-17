@@ -34,12 +34,8 @@ contains
     character(len=*), intent(in) :: file
 
     type(rock_t), allocatable :: rocks(:)
-    integer :: ans1, ans, n2, ans0, i, i2, pos0, pos1, dpos
-    integer(I8) :: ans2, nrep, nleft, k0, k1
-    integer(I8) :: z0, z1, z2, ztot
-    integer :: h0, h1, h2
-    integer, allocatable :: aa(:)
-
+    integer :: h0, h1, rper(2), hper(2), ans1, ans
+    integer(I8) :: ans2, z0, z1, ztot, ncycle, nremain
     integer, parameter :: NROCKS_P1 = 2022
     integer(I8), parameter :: NROCKS_P2=1000000000000_I8
 
@@ -47,117 +43,106 @@ contains
     call fill_sprite_library()
     !call fill_jet_pattern('inp/17/test.txt')
     call fill_jet_pattern(file)
-    call throw_rocks(NROCKS_P1, rocks, ans1)
+    call throw_rocks(NROCKS_P1, rocks, ans1, rper, hper)
     print '("Answer 17/1 ", i0, l2)', ans1, ans1==3106 .or. ans1==3068
 
     ! Part 2
-    print '("Jet pattern length =",i0)', size(jet_pattern) 
-    ! for real case, pattern is not divisible by number of sprites
-    n2 = size(jet_pattern)*NSPRITE
-    print '("Searching for pattern in chunks of ",i0)', n2
+    call throw_rocks(size(jet_pattern), rocks, ans, rper, hper)
+    print '("Initial period ",i0,"  with tower height  ",i0)', &
+    &   rper(1), hper(1)
+    print '("Next periods   ",i0,"  increase height by ",i0)', &
+    &   rper(2), hper(2)
 
-    call throw_rocks(1000*n2, rocks, ans, n2, aa)
-    pos0 = 0
-    pos1 = 0
-    i=1
-    do
-      ! I know value "77580" occurs only once within a pattern
-      i2 = findloc(aa(i:), 77580, dim=1)
-      if (i2==0) exit
-      i = i-1+i2
-      print *,'pattern marker at:',i, 'vals=', aa(i-3:i+3)
-      if (pos0==0) then
-        pos0 = i
-      else if (pos1==0) then
-        pos1 = i
-      end if
-      i = i + 1
-    end do
+    associate(a=>NROCKS_P2-rper(1), b=>int(rper(2),I8))
+      ncycle = a/b
+      nremain = mod(a,b) 
+    end associate
+    print '("Repeating the period ",i0," times with remainder ",i0)', &
+    &   ncycle, nremain
 
-    ! Find the beginning of a pattern
-    do
-      if (aa(pos0-1)==aa(pos1-1)) then
-        pos0 = pos0 - 1
-        pos1 = pos1 - 1
-      else
-        exit
-      end if
-    end do
-    print *, 'Pattern begins at ', pos0
-    dpos = pos1-pos0
-    print *, 'Pattern length ', dpos
-    print *, all(aa(pos0:pos1-1)==aa(pos1:pos1+dpos-1))
-
-    ! How many chunks are needed / what is the remainder
-    nrep = NROCKS_P2/int(n2,I8)
-    nleft = mod(NROCKS_P2, int(n2,I8))
-    print *, 'nrep / left ', nrep, nleft
-
-    ! We know that the first chunk is out of pattern
-    ! h0 = a non repeating chunk
-    z0 = (pos0-1)*n2
+    ! Calculate the height of the remainder rocks
+    z0 = rper(1)+rper(2)
     call throw_rocks(int(z0), rocks, h0)
-    ! h1 = one chunk + (347 chunks)
-    z1 = n2*(pos0-1+dpos)
+    z1 = rper(1)+rper(2)+nremain
     call throw_rocks(int(z1), rocks, h1)
-    k0 = (nrep-(pos0-1))/dpos
-    k1 = mod((nrep-(pos0-1)), dpos)
-    print *, 'k0 / k1 ', k0, k1
-    ! h2 = one_chunk + (347 chunks) + k1 chunks + remainder
-    z2 = n2*((pos0-1)+dpos+k1)+nleft
-    call throw_rocks(int(z2), rocks, h2)
-    print *, 'h0 ',z0, h0
-    print *, 'h1 ',z1, h1
-    print *, 'h2 ',z2, h2
-
-    ztot = z0 + k0*(z1-z0) + (z2-z1)
-    print *, ztot, NROCKS_P2, NROCKS_P2==ztot
-
-    ans2 = h0 + k0*(h1-h0) + (h2-h1)
-    print *, 'ans 2',ans2
+    
+    ztot = rper(1) + rper(2)*ncycle + nremain
+    ans2 = hper(1) + hper(2)*ncycle + (h1-h0)
+    if (ztot /= NROCKS_P2) error stop 'day2217 - counting error'
     print '("Answer 17/2 ", i0, l2)', ans2, ans2==1537175792495_I8 .or. ans2==1514285714288_I8
 
   end subroutine day2217
 
 
-  subroutine throw_rocks(n, rocks, ans, istep, aa)
+  subroutine throw_rocks(n, rocks, height, rper, hper)
     integer, intent(in) :: n
     type(rock_t), allocatable, intent(out) :: rocks(:)
-    integer, intent(out) :: ans
-    integer, intent(in), optional :: istep
-    integer, allocatable, intent(out), optional :: aa(:)
-
-    integer :: i, ans0
+    integer, intent(out) :: height
+    integer, intent(out), optional :: rper(2), hper(2)
+!
+! Throw "n" rocks (from the beginning of time). 
+! On the output:
+! - an array with rocks position "rocks"
+! - height of the rock tower "height"
+! - number of rocks in the initial period "rper(1)"
+! - height of tower at the end of the initial period "hper(1)"
+! - number of rocks in additional periods "rper(2)"
+! - tower height increase during additional periods "hper(2)"
+!
+    integer :: i, jet_last, h_last, r_last
+    integer :: rper0(2), hper0(2)
     logical :: isrest
 
-    if (present(aa) .and. present(istep)) then
-      allocate(aa(n/istep))
-      if (mod(n,istep)/=0) error stop 'not a multiple'
-      aa = 0
-    end if
+    rper0 = 0
+    hper0 = 0
 
-    ans0 = 0
     allocate(rocks(n))
     global_maxy = 0
+    jet_last = size(jet_pattern)
+    h_last = global_maxy
+    r_last = 1
     do i=1,size(rocks)
       rocks(i) = rock_t(i)
       if (i>1) rocks(i)%ijet = rocks(i-1)%ijet
+
+      if (rocks(i)%is==1 .and. rocks(i)%ijet<jet_last) then
+        ! Here, a period may start
+        if (i==0) then
+          continue ! ignore first line
+        else if (rper0(1)==0) then
+          rper0(1) = i - r_last
+          hper0(1) = global_maxy - h_last
+        else if (rper0(2)==0) then
+          rper0(2) = i - r_last
+          hper0(2) = global_maxy - h_last
+        else ! check the period has not changed
+          if (rper0(2) /= i-r_last .or. hper0(2) /= global_maxy-h_last) then
+            ! TODO detection works for real input but not for
+            ! the test case
+            error stop 'throw_rock - Period has changed'
+          else
+            print '(3x,a,i0,a)', 'Period detection confirmed (rocks =',i,')'
+          end if
+        end if
+!print *, rocks(i)%ijet, global_maxy-h_last, i-r_last, i
+        h_last = global_maxy
+        r_last = i
+!call visualize(rocks(1:i),8)
+        jet_last = rocks(i)%ijet 
+      else if (rocks(i)%is==1) then
+        jet_last = rocks(i)%ijet 
+      end if
       do
         call rock_step(rocks(i), rocks(1:i-1), isrest)
         if (isrest) exit
       end do
-
-      if (present(istep) .and. present(aa)) then
-        if (mod(i,istep)==0) then
-          ans = global_maxy
-          !print *, ans-ans0
-          aa(i/istep) = ans-ans0
-          ans0 = ans
-        end if
-      end if
     end do
     !call visualize(rocks)
-    ans = global_maxy
+    height = global_maxy
+    if (present(rper) .and. present(hper)) then
+      rper = rper0
+      hper = hper0
+    end if
   end subroutine throw_rocks
 
 
@@ -183,10 +168,8 @@ contains
     select case(jetch)
     case('<')
       if (.not. iscollision(th,rocks,[-1,0])) th%p=th%p+[-1,0]
-!print *, 'left'
     case('>')
       if (.not. iscollision(th,rocks,[+1,0])) th%p=th%p+[+1,0]
-!print *, 'right'
     case default
       error stop 'rock_step - invalid jet pattern'
     end select
@@ -222,7 +205,6 @@ contains
         do rx=1, SPRITE_X
           if (sprite_lib(rx,ry,obj%is)/=CH_ROCK) cycle
           iscol = .true.
-!print *, 'collision with the bottom'
           return
         end do
       end do OUT1
@@ -234,7 +216,6 @@ contains
         do ry=1, SPRITE_Y
           if (sprite_lib(rx,ry,obj%is)/=CH_ROCK) cycle
           iscol = .true.
-!print *, 'collision with the left'
           return
         end do
       end do OUT2
@@ -246,17 +227,14 @@ contains
         do ry=1, SPRITE_Y
           if (sprite_lib(rx,ry,obj%is)/=CH_ROCK) cycle
           iscol = .true.
-!print *, 'collision with the right'
           return
         end do
       end do OUT3
     end if
 
     ! Check collision with other rocks
+    ! To optimize, only few last rocks are checked (15 is safe)
 
-    ! No colision possible, if it is above the maximum
-   !if (obj%p(2)>global_maxy) return
-    ! To optimize, only few last rocks are checked
     MAIN: do io=size(objs),max(size(objs)-20,1),-1
     !MAIN: do io=size(objs),1,-1
       ! ignore itself
@@ -277,6 +255,7 @@ contains
             if (rxx>0 .and. rxx<=SPRITE_X .and. ryy>0 .and. ryy<=SPRITE_Y) then
               if (sprite_lib(rxx,ryy,objs(io)%is)/=CH_ROCK) cycle
               iscol = .true.
+!if (size(objs)-io>10) print *, 'collision with i-10 ',size(objs)-io
 !print *, 'collision with object ',io
               exit MAIN
             end if
@@ -338,7 +317,6 @@ contains
     sprite_lib(:,:,5) = sprite
     sprite_maxy(5)=2
   end subroutine fill_sprite_library
-
 
 
   subroutine visualize(objs, ntop)
