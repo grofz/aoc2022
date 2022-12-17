@@ -44,3 +44,6 @@ Solving Advent of Code 2022 in Fortran
 16. Proboscidea Volcanium
     - optimize the order of closing valves
     - recursive search / greedy algorithm to pick three best moves
+17. Pyroclastic Flow
+    - part 1 is a tetris simulation
+    - part 2 requires a pattern recognition

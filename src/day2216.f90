@@ -16,7 +16,7 @@ module day2216_mod
     integer :: pos(MAX_PLAYERS)
     integer :: trg(MAX_PLAYERS) = 0
     integer :: eta(MAX_PLAYERS)
-    integer :: flow = 0
+!   integer :: flow = 0
     integer :: deadline = -1
     integer :: nc = -1
     integer, pointer :: aa(:,:) => null()
@@ -293,17 +293,19 @@ print *, 'paths evaluated ',counter_for_stat
     ! Update time
     isirq = .false.
     this%t = this%t + 1
-    this%gain = this%gain + this%flow
+!   this%gain = this%gain + this%flow
 
     do k=1,this%nc
       if (this%trg(k)==0) cycle
       if (this%eta(k)==0) then
         ! arrived - open the gate
-        if (this%opened(this%trg(k)) .or. this%rate(this%trg(k))==0) &
+        !if (this%opened(this%trg(k)) .or. this%rate(this%trg(k))==0) &
+        if (this%rate(this%trg(k))==0) &
           error stop 'open - valve already opened or stuck'
         if (count(this%trg==this%trg(k))/=1) error stop 'open - more than one plaer targeting same valve'
-        this%opened(this%trg(k)) = .true.
-        this%flow = this%flow + this%rate(this%trg(k))
+!       this%opened(this%trg(k)) = .true.
+!       this%flow = this%flow + this%rate(this%trg(k))
+!     this%gain = this%gain + (this%deadline-this%t)*this%rate(this%trg(k))
         this%pos(k) = this%trg(k)
         this%trg(k) = 0
         isirq = .true.
@@ -328,6 +330,8 @@ print *, 'paths evaluated ',counter_for_stat
       if (d<1) error stop 'moveto - dmap value is not trusted'
       this%trg(ik) = ito
       this%eta(ik) = d
+      this%gain = this%gain + max(0,(this%deadline-this%t-1-d)*this%rate(ito))
+      this%opened(ito) = .true.
     end associate
   end subroutine state_moveto
 
@@ -336,7 +340,8 @@ print *, 'paths evaluated ',counter_for_stat
     class(state_t), intent(in) :: th
 
     write(*,'("t= ",i2," f=",i3," g=",i5," at ",a2,"/",a2, " trg ",a2,"/",a2," eta=",i2,"/",i2)') &
-      th%t, th%flow, th%gain, safe_label(th%pos(1)), safe_label(th%pos(2)), &
+      th%t, -1, th%gain, safe_label(th%pos(1)), safe_label(th%pos(2)), &
+      !th%t, th%flow, th%gain, safe_label(th%pos(1)), safe_label(th%pos(2)), &
       safe_label(th%trg(1)), safe_label(th%trg(2)), th%eta
   contains
     function safe_label(i)
@@ -351,7 +356,7 @@ print *, 'paths evaluated ',counter_for_stat
   end subroutine state_print
 
 
-  pure function next_to_open(th, ik) result(pos)
+  function next_to_open(th, ik) result(pos)
     integer, allocatable :: pos(:)
     class(state_t), intent(in) :: th 
     integer, intent(in) :: ik
@@ -378,6 +383,7 @@ print *, 'paths evaluated ',counter_for_stat
       associate(d=>th%dmap(th%pos(ik), i))
         if (d<1) error stop 'next_to_open - dmap value is not trusted'
         val(i) = real(th%rate(i))/real(d+1) 
+        !val(i) = real((th%deadline-th%t-d-1)*th%rate(i))
       end associate
     end do
 
