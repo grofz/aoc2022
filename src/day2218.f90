@@ -111,21 +111,40 @@ contains
 !
 ! Fill external pores by water
 !
-    logical :: was_flood
-    integer :: i, j, k, d, n(3)
+    logical :: was_flood, isfinished(size(aa,1),size(aa,2),size(aa,3))
+    integer :: i, j, k, d, n(3), n_pore, n_water, n_solid
 
-    if (aa(1,1,1)/=PORE) error stop 'fill_water - border gap is blocked'
-    aa(1,1,1) = WATER
+    ! Make sure there is only pore/water at the boundary
+    ! Fill boundary by water to speed-up flooding
+    n_pore = count(aa==PORE)
+    n_water = count(aa==WATER)
+    n_solid = count(aa==SOLID)
+    aa(1,:,:) = WATER
+    aa(:,1,:) = WATER
+    aa(:,:,1) = WATER
+    aa(size(aa,1),:,:) = WATER
+    aa(:,size(aa,2),:) = WATER
+    aa(:,:,size(aa,3)) = WATER
+    if (count(aa==SOLID)/=n_solid) error stop 'solid at boundary?'
+    if (count(aa==PORE .or. aa==WATER) /= n_water+n_pore) error stop 'some thing in border gap'
+
+    ! Logical array marking unfinished water voxels
+    where (aa==WATER)
+      isfinished = .false.
+    else where
+      isfinished = .true.
+    end where
 
     MAIN: do
       was_flood = .false.
-      ! Loop over WATER voxels...
+      ! Loop over unfinished WATER voxels...
       do i = 1, size(aa,1)
       do j = 1, size(aa,2)
       do k = 1, size(aa,3)
-        if (aa(i,j,k) /= WATER) cycle
+        if (isfinished(i,j,k)) cycle
 
         !... and flood all its PORE neighbors
+        isfinished(i,j,k) = .true.
         do d=1,6
           n = [i,j,k] + DIR(:,d)
           if (any(n<1) .or. n(1)>size(aa,1) .or. n(2)>size(aa,2) .or. n(3)>size(aa,3)) cycle
@@ -133,6 +152,7 @@ contains
 
           was_flood = .true.
           aa(n(1),n(2),n(3)) = WATER
+          isfinished(n(1),n(2),n(3)) = .false.
         end do
       end do
       end do

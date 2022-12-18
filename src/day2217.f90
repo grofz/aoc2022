@@ -41,19 +41,21 @@ contains
 
     ! Part 1
     call fill_sprite_library()
-    !call fill_jet_pattern('inp/17/test.txt')
+!   call fill_jet_pattern('inp/17/test.txt')
     call fill_jet_pattern(file)
-    call throw_rocks(NROCKS_P1, rocks, ans1, rper, hper)
+    call throw_rocks(NROCKS_P1, rocks, ans1)
     print '("Answer 17/1 ", i0, l2)', ans1, ans1==3106 .or. ans1==3068
 
     ! Part 2
-    call throw_rocks(size(jet_pattern), rocks, ans, rper, hper)
+    ! minimum rocks required to detect period for the test case
+    call throw_rocks(max(size(jet_pattern),200), rocks, ans, rper, hper)
     print '("Initial period ",i0,"  with tower height  ",i0)', &
     &   rper(1), hper(1)
     print '("Next periods   ",i0,"  increase height by ",i0)', &
     &   rper(2), hper(2)
 
     associate(a=>NROCKS_P2-rper(1), b=>int(rper(2),I8))
+      if (b==0) error stop 'period not detected properly'
       ncycle = a/b
       nremain = mod(a,b) 
     end associate
@@ -89,7 +91,7 @@ contains
 ! - number of rocks in additional periods "rper(2)"
 ! - tower height increase during additional periods "hper(2)"
 !
-    integer :: i, jet_last, h_last, r_last
+    integer :: i, jet_last, h_last, r_last, i_last
     integer :: rper0(2), hper0(2)
     logical :: isrest
 
@@ -101,42 +103,60 @@ contains
     jet_last = size(jet_pattern)
     h_last = global_maxy
     r_last = 1
+    i_last = -2 ! skip a first candidate for a period
     do i=1,size(rocks)
       rocks(i) = rock_t(i)
       if (i>1) rocks(i)%ijet = rocks(i-1)%ijet
 
-      if (rocks(i)%is==1 .and. rocks(i)%ijet<jet_last) then
+      ! This block is for period detection
+      PERIOD: if (rocks(i)%is==1 .and. rocks(i)%ijet<jet_last .and. &
+      &   (rocks(i)%ijet==i_last .or. i_last<0)) then
         ! Here, a period may start
-        if (i==0) then
-          continue ! ignore first line
+        if (i==1) then
+          continue ! ignore the first rock
+        else if (i_last < 0) then
+          ! ignore first few candidates (until i_last is -1)
+          if (i_last==-1) then
+            i_last = rocks(i)%ijet
+          else
+            i_last = i_last+1
+          end if
         else if (rper0(1)==0) then
+          ! this seems as the end of initial period
           rper0(1) = i - r_last
           hper0(1) = global_maxy - h_last
         else if (rper0(2)==0) then
+          ! this seems as the end of a regular period
           rper0(2) = i - r_last
           hper0(2) = global_maxy - h_last
-        else ! check the period has not changed
+        else ! check the regular period has not changed
           if (rper0(2) /= i-r_last .or. hper0(2) /= global_maxy-h_last) then
-            ! TODO detection works for real input but not for
-            ! the test case
             error stop 'throw_rock - Period has changed'
           else
-            print '(3x,a,i0,a)', 'Period detection confirmed (rocks =',i,')'
+            if (present(rper)) &
+            & print '(3x,a,i0,a)', 'Period detection confirmed (rocks =',i,')'
           end if
         end if
 !print *, rocks(i)%ijet, global_maxy-h_last, i-r_last, i
-        h_last = global_maxy
-        r_last = i
 !call visualize(rocks(1:i),8)
+
+        ! start updating after the initial period was established
+        if (rper0(1)/=0) then
+          h_last = global_maxy
+          r_last = i
+        end if
         jet_last = rocks(i)%ijet 
       else if (rocks(i)%is==1) then
         jet_last = rocks(i)%ijet 
-      end if
+      end if PERIOD
+
+      ! Now settle down the rock
       do
         call rock_step(rocks(i), rocks(1:i-1), isrest)
         if (isrest) exit
       end do
     end do
+
     !call visualize(rocks)
     height = global_maxy
     if (present(rper) .and. present(hper)) then
