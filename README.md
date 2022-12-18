@@ -47,3 +47,7 @@ Solving Advent of Code 2022 in Fortran
 17. Pyroclastic Flow
     - part 1 is a tetris simulation
     - part 2 requires a pattern recognition
+18. Boiling Boulders
+    - calculate are in 3D-matrix of pores/rock/water
+    - using Fortran matrices and functions
+    - TODO: visualize the rock structure
