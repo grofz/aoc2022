@@ -18,6 +18,7 @@ contains
 
     aa = read_matrix(file)
     call fill_water(aa)
+    call print_rock(aa)
     associate (w=>count(aa==WATER), p=>count(aa==PORE), s=>count(aa==SOLID))
       print '("Porosity: external ",f4.1,",  internal ",f4.1,",  rock ",f4.1)', &
       & real(100*w)/real(w+p+s), &
@@ -28,6 +29,7 @@ contains
     ans2 = count_area(aa, .true.)
     print '("Answer 18/1 ", i0, l2)', ans1, ans1==4340
     print '("Answer 18/2 ", i0, l2)', ans2, ans2==2468
+
   end subroutine day2218
 
 
@@ -160,5 +162,37 @@ contains
       if (.not. was_flood) exit
     end do MAIN
   end subroutine fill_water
+
+
+  subroutine print_rock(aa)
+    integer, intent(in) :: aa(:,:,:)
+
+    integer :: j, k
+
+    do k=2,size(aa,3)-1
+      print '(i0)', k
+      do j=2,size(aa,2)-1
+        print '((a))', i2s(aa(2:size(aa,1)-1,j,k))
+        !print '(*(i1))', aa(:,j,k)
+      end do
+    end do
+  contains
+    function i2s(line) result (s)
+      integer, intent(in) :: line(:)
+      character(len=size(line)) :: s
+      integer :: i
+      s = ''
+      do i=1,size(line)
+        select case(line(i))
+        case(WATER)
+          s(i:i)='~'
+        case(PORE)
+          s(i:i)=' '
+        case(SOLID)
+          s(i:i)='#'
+        end select
+      end do
+    end function
+  end subroutine
 
 end module day2218_mod
