@@ -7,7 +7,6 @@ module day2220_mod
     integer(I8) :: val
     type(cll_t), pointer :: next => null()
     type(cll_t), pointer :: prev => null()
-    logical :: mixed=.false.
   end type cll_t
 
   type cll_ptr
@@ -20,7 +19,7 @@ contains
     character(len=*), intent(in) :: file
 
     integer, allocatable :: alist(:)
-    integer :: i, izero, ans, k
+    integer :: i, izero, ans1, k, n
     integer(I8) :: ans2
     type(cll_t), pointer :: head, last, dest, head2
     type(cll_ptr), allocatable :: aindex(:), aindex2(:)
@@ -29,10 +28,9 @@ contains
     integer :: NMIXED = 10
 
     alist = read_numbers(file)
-    !alist = read_numbers('inp/20/test.txt')
-   !print '(10(i5,1x))', alist
-    print *, 'numbers = ',size(alist)
+    n = size(alist)
 
+    ! Part 1
     allocate(aindex(size(alist)))
     do i=1,size(alist)
       aindex(i)%ptr => cll_new(int(alist(i),I8))
@@ -41,28 +39,22 @@ contains
       if (i==1) head => last
     end do
     izero = findloc(alist, 0, dim=1)
-    print *, 'n =',cll_count(head), cll_count_reverse(head)
+    print *, 'n =',cll_count(head), cll_count_reverse(head), n
     !print '(10(i5,1x))', cll_export(head)
 
     ! mix
     do i=1,size(alist)
-      if (aindex(i)%ptr%mixed) error stop 'already mixed'
-      call cll_mix(aindex(i)%ptr)
-      aindex(i)%ptr%mixed = .true.
+      call cll_mix(aindex(i)%ptr, n)
     end do
 
-    ans = 0
-    print *, 'zero =',aindex(izero)%ptr%val
-    dest => cll_jump(aindex(izero)%ptr, 1000_I8)
-    print *, '1000 =', dest%val
-    ans = ans + dest%val
-    dest => cll_jump(dest, 1000_I8)
-    print *, '2000 =', dest%val
-    ans = ans + dest%val
-    dest => cll_jump(dest, 1000_I8)
-    print *, '3000 =', dest%val
-    ans = ans + dest%val
-    print *, 'ans =', ans
+    ! find answer
+    ans1 = 0
+    dest => aindex(izero)%ptr
+    do k=1,3
+      dest => cll_jump(dest, 1000_I8)
+      ans1 = ans1 + dest%val
+    end do
+    print '("Answer 20/1 ",i0,l2)', ans1, 7153==ans1
 
     ! Part 2
     allocate(aindex2(size(alist)))
@@ -73,27 +65,20 @@ contains
       if (i==1) head2 => last
     end do
 
-    ! mix
+    ! mix 10 times
     do k=1,NMIXED
-    do i=1,size(alist)
-      !if (aindex2(i)%ptr%mixed) error stop 'already mixed'
-      call cll_mix(aindex2(i)%ptr)
-      !aindex2(i)%ptr%mixed = .true.
-    end do
+      do i=1,size(alist)
+        call cll_mix(aindex2(i)%ptr, n)
+      end do
     end do
 
     ans2 = 0
-    print *, 'zero =',aindex2(izero)%ptr%val
-    dest => cll_jump(aindex2(izero)%ptr, 1000_I8)
-    print *, '1000 =', dest%val
-    ans2 = ans2 + dest%val
-    dest => cll_jump(dest, 1000_I8)
-    print *, '2000 =', dest%val
-    ans2 = ans2 + dest%val
-    dest => cll_jump(dest, 1000_I8)
-    print *, '3000 =', dest%val
-    ans2 = ans2 + dest%val
-    print *, 'ans2 =', ans2
+    dest => aindex2(izero)%ptr
+    do k=1,3
+      dest => cll_jump(dest, 1000_I8)
+      ans2 = ans2 + dest%val
+    end do
+    print '("Answer 20/2 ",i0,l2)', ans2, 6146976244822_I8==ans2
 
   end subroutine day2220
 
@@ -124,46 +109,24 @@ contains
   end subroutine cll_addbehind
 
 
-  subroutine cll_movebehind(moved, dest)
+  subroutine cll_mix(moved, n)
     type(cll_t), pointer, intent(in) :: moved 
-    type(cll_t), pointer, intent(in) :: dest
-
-    ! todo may be error if less than three elements
-    if (cll_count(moved) < 3) error stop 'movebehind not intended to work with small circles yeyt'
-
-    ! Do nothing if moved is same as destination
-    if (associated(moved,dest)) return
-
-    ! Unlink "moved" from the circle
-    moved%next%prev => moved%prev
-    moved%prev%next => moved%next
-
-    ! Place "moved" behind "dest"
-    call cll_addbehind(dest, moved)
-  end subroutine cll_movebehind
-
-
-  subroutine cll_mix(moved)
-    type(cll_t), pointer, intent(in) :: moved 
+    integer, intent(in) :: n
 
     type(cll_t), pointer :: dest
-    integer :: n
-    ! todo may be error if less than three elements
-    if (cll_count(moved) < 3) error stop 'movebehind not intended to work with small circles yeyt'
 
     if (moved%val==0) return
-    n = cll_count(moved)
 
     ! Unlink "moved" from the circle
     moved%next%prev => moved%prev
     moved%prev%next => moved%next
 
-    ! find new position
+    ! Find new position
     dest => cll_jump(moved, moved%val, n-1)
 
     ! Relink the node back
     call cll_addbehind(dest, moved)
-  end subroutine
+  end subroutine cll_mix
 
 
   function cll_jump(node, distance, n) result(moved)
