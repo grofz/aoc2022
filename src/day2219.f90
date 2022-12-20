@@ -40,48 +40,51 @@ contains
     type(string_t), allocatable :: lines(:)
     type(blueprint_t), allocatable, target :: bb(:)
     type(state_t), allocatable :: init(:)
-    integer :: i, j, t, ans, fid
+    integer :: i, j, t, ans, score
     integer, parameter :: time_part_1=24, time_part_2=32
 
-!   lines = read_strings(file)
-    lines = read_strings('inp/19/test.txt')
+    lines = read_strings(file)
+!   lines = read_strings('inp/19/test.txt')
     allocate(bb(size(lines)))
     do i=1,size(lines)
       bb(i) = blueprint_new(lines(i)%str)
     end do
 
-    open(newunit=fid, file='test.log', status='replace')
     allocate(init(size(bb)))
     ans = 0 
     do i=1,size(bb)
       init(i) = state_new(bb(i), time_part_1)
-      call deep_search(init(i))
+      call deep_search(init(i),score)
       call state_print(init(i))
+      print '("Score: ",i0,/,a)',score
       ans = ans + init(i)%inv(ID_G,init(i)%deadline) * init(i)%bp%id
-      write (fid,*) init(i)%bp%id, init(i)%inv(ID_G,init(i)%deadline)
     end do
-    close(fid)
-    print *, ans, ans==1766 .or. ans==33
+    print '("Answer 19/1 ",i0,l2)', ans, ans==1766 .or. ans==33
 
     ! Part 2
     ans = 1
     do i=1,min(size(bb),3)
       init(i) = state_new(bb(i), time_part_2)
-      call deep_search(init(i))
+      call deep_search(init(i), score)
       call state_print(init(i))
+      print '("Score: ",i0,/,a)',score
       ans = ans * init(i)%inv(ID_G,init(i)%deadline)
     end do
-    print *, ans, ans==30780 .or. ans==56*62
+    print '("Answer 19/2 ",i0,l2)', ans, ans==30780 .or. ans==56*62
+    print *
+    print *
   end subroutine day2219
 
 
-  recursive subroutine deep_search(s)
+  recursive subroutine deep_search(s, score)
     type(state_t), intent(inout) :: s
+    integer, intent(out) :: score
 
     type(state_t) :: s0, sbest
-    integer :: t0, k
-    logical :: worth_build(4), can_build_later(4)
+    integer :: k, score0
+    logical :: worth_build(4)
 
+    score = s%inv(ID_G,s%deadline)
     if (s%t==s%deadline) return
     worth_build = build_choice(s)
 
@@ -91,11 +94,14 @@ contains
       s0=s
       s0%next = k
       call state_advance(s0)
-      call deep_search(s0)
+ !if (state_maxscore(s0)<score) cycle
+      call deep_search(s0, score0)
       if (s0%inv(ID_G,s%deadline) > sbest%inv(ID_G,s%deadline)) &
       & sbest = s0
+      score = sbest%inv(ID_G,sbest%deadline)
     end do
     s = sbest
+    score = s%inv(ID_G,s%deadline)
   end subroutine deep_search
 
 
@@ -160,25 +166,21 @@ contains
     end if
 
     can_build = .true.
-!   do id_robot=1,4
-!     do k=1,size(th%bp%cost,1)
-!       if (th%bp%cost(k, id_robot)==0) cycle
-!       if (th%inv(k,th%t-1) < th%bp%cost(k, id_robot)) then
-!         can_build(id_robot) = .false.
-!         exit
-!       end if
-!     end do
-!   end do
 
     ! remove choices that are no longer needed
     do id_robot=1,4
       ! there is never too many geodes
       if (id_robot==ID_G) cycle
       if (.not. can_build(id_robot)) cycle
-      if (th%inv(id_robot+ID_ROB,th%t) >= th%bp%maxcost(id_robot)) &
-      & can_build(id_robot) = .false.
-      !max_needed = maxval(th%bp%cost(id_robot,:),dim=1)
-      !if (th%inv(id_robot+ID_ROB,time)>=max_needed) can_build(id_robot) = .false.
+     !if (th%inv(id_robot+ID_ROB,th%t) >= th%bp%maxcost(id_robot)) &
+     !& can_build(id_robot) = .false.
+      associate(x=>th%inv(id_robot+ID_ROB,th%t), &
+        &       z=>th%bp%maxcost(id_robot), &
+        &       y=>th%inv(id_robot,th%t), &
+        &       t=>th%deadline-th%t-0)
+        if (x*t + y >= t*z) can_build(id_robot)=.false.
+      end associate
+      ! https://www.reddit.com/r/adventofcode/comments/zpy5rm/2022_day_19_what_are_your_insights_and/
     end do
 
   end function
@@ -216,6 +218,28 @@ contains
     ! Mark factory
     th%factory(th%t) = id_robot
   end subroutine state_build
+
+
+  integer function state_maxscore(this) result(score)
+    class(state_t), intent(in) :: this
+
+    type(state_t) :: th
+    integer :: t
+
+    score=huge(score)
+    return
+
+    th = this
+    do t=th%t+1,th%deadline
+      associate (ng=>th%inv(ID_G+ID_ROB,t:th%deadline))
+        ng = ng + 1
+      end associate
+    end do
+    do t=th%t+1,th%deadline
+      th%inv(ID_G,t) = th%inv(ID_G,t-1) + th%inv(ID_G+ID_ROB,t)
+    end do
+    score = th%inv(ID_G,th%deadline)
+  end function
 
 
   subroutine state_print(th)
@@ -316,7 +340,6 @@ print '("Max cost: ",4(i2,1x))', new%maxcost
     id = 0
     if (i==0) then
       i=len_trim(str)
-      !id = ID_B
     else 
       i = i-1
     end if
