@@ -25,7 +25,8 @@ contains
 
     type(string_t), allocatable :: lines(:), tokens(:)
     integer :: i, cursize
-    type(item_t), pointer :: root, curdir, new
+    type(item_t), pointer :: root, new
+    class(item_t), pointer :: curdir
 
     integer :: ans1, ans2
 
@@ -73,7 +74,7 @@ contains
     character(len=*), intent(in) :: name
     integer, intent(in) :: size
     logical, intent(in) :: isdir
-    type(item_t), pointer, intent(in) :: p
+    class(item_t), pointer, intent(in) :: p
 
     allocate(new)
     new % name = string_t(name)

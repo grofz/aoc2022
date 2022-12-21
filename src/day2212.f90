@@ -26,6 +26,14 @@ contains
     h = read_pattern(file)
     start%h => h
     start%xy = findloc(h,'E')
+  print *, h
+  print *, start%xy
+  print *, findloc(h,'E')
+  if (all(start%xy==[0,0])) then
+    ! ifort can nort find properly!
+    start%xy=[21,44]
+    print *, 'INTEL FINDLOC DOES NOT WORK!'
+  end if
     h(start%xy(1),start%xy(2)) = 'z'
     start%tar = findloc(h,'S')
     h(start%tar(1),start%tar(2)) = 'a'

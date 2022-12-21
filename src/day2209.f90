@@ -6,7 +6,8 @@ module day2209_mod
 
   type rope_t(rope_len)
     integer, len :: rope_len
-    integer :: r(2, rope_len)=0
+    !integer :: r(2, rope_len)=0
+    integer :: r(2, rope_len)
   end type
 
   integer, parameter :: DIR(2,4)=reshape([-1,0, 0,1, 1,0, 0,-1],[2,4])

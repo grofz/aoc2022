@@ -15,10 +15,16 @@ module day2221_mod
     integer(I8) :: val = NULL_VAL
     character(len=NAME_LEN) :: name
     character(len=NAME_LEN) :: opnames(2) = ['none','none']
+    type(monkey_t), pointer :: op1_ptr => null()
+    type(monkey_t), pointer :: op2_ptr => null()
   end type
   interface monkey_t
     module procedure monkey_new
   end interface 
+
+  interface operator(.div.)
+    module procedure integer_division
+  end interface
 
 contains
 
@@ -26,10 +32,11 @@ contains
     character(len=*), intent(in) :: file
 
     type(string_t), allocatable :: lines(:)
-    type(monkey_t), allocatable :: monkeys(:)
-    integer :: i, nm, iroot, ihumn
+    type(monkey_t), allocatable, target :: monkeys(:)
+    integer :: i, m(2), nm, iroot, ihumn
     integer(I8) :: ans1, ans2
 
+    ! Read input and create pointer links
     lines = read_strings(file)
     !lines = read_strings('inp/21/test.txt')
     nm = size(lines)
@@ -37,19 +44,26 @@ contains
     do i=1,nm
       monkeys(i) = monkey_t(lines(i)%str)
     end do
+    do i=1,nm
+      if (monkeys(i)%op == OP_VAL) cycle
+      m(1) = monkey_find(monkeys(i)%opnames(1), monkeys)
+      m(2) = monkey_find(monkeys(i)%opnames(2), monkeys)
+      if (any(m<1)) error stop 'monkey not found'
+      monkeys(i)%op1_ptr => monkeys(m(1))
+      monkeys(i)%op2_ptr => monkeys(m(2))
+    end do
     iroot = monkey_find(ROOT, monkeys)
     ihumn = monkey_find(HUMN, monkeys)
+    !call monkey_print(monkeys(iroot))
     print *, 'nm =',nm, 'root =', iroot, 'humn =', ihumn
 
     ! Part 1
-    ans1 =  monkey_eval(monkeys(iroot), monkeys)
+    ans1 =  monkey_eval(monkeys(iroot))
     print '("Answer 21/1 ",i0,l2)', ans1, ans1==276156919469632_I8 .or. ans1==152
 
-    ! Dependency of root on humn
-    !call monkey_print(monkeys(iroot), monkeys)
 
     ! Part 2
-    ans2 = monkey_expected(monkeys(iroot), 0_I8, monkeys)
+    ans2 = monkey_expected(monkeys(iroot), 0_I8)
     print '("Answer 21/2 ",i0,l2)', ans2, ans2==3441198826073_I8 .or. ans2==301
 
   end subroutine day2221
@@ -107,9 +121,8 @@ contains
   end function monkey_find
 
 
-  pure recursive function monkey_eval(this, monkeys) result(val)
+  pure recursive function monkey_eval(this) result(val)
     type(monkey_t), intent(in) :: this
-    type(monkey_t), intent(in) :: monkeys(:)
     integer(I8) :: val
 
     integer :: i1, i2
@@ -118,11 +131,8 @@ contains
     if (this%op==OP_VAL) then
       val = this%val
     else
-      i1 = monkey_find(this%opnames(1),monkeys)
-      i2 = monkey_find(this%opnames(2),monkeys)
-      if (i1<1 .or. i2<1) error stop 'monkey not found'
-      s(1) = monkey_eval(monkeys(i1),monkeys)
-      s(2) = monkey_eval(monkeys(i2),monkeys)
+      s(1) = monkey_eval(this%op1_ptr)
+      s(2) = monkey_eval(this%op2_ptr)
       select case (this%op)
       case(OP_ADD)
         val = s(1) + s(2)
@@ -131,7 +141,7 @@ contains
       case(OP_MUL)
         val = s(1) * s(2)
       case(OP_DIV)
-        val = s(1) / s(2)
+        val = s(1) .div. s(2)
       case default
         error stop 'eval - invalid op'
       end select
@@ -139,11 +149,10 @@ contains
   end function monkey_eval
 
 
-  pure recursive function monkey_ancestorof(this, name, monkeys) result(isancestor)
+  pure recursive function monkey_ancestorof(this, name) result(isancestor)
     logical :: isancestor
     class(monkey_t), intent(in) :: this
     character(len=NAME_LEN), intent(in) :: name
-    type(monkey_t), intent(in) :: monkeys(:)
 
     logical :: is(2)
     integer :: i1, i2
@@ -151,45 +160,38 @@ contains
     if (this%op==OP_VAL) then
       isancestor = this%name==name 
     else
-      i1 = monkey_find(this%opnames(1),monkeys)
-      i2 = monkey_find(this%opnames(2),monkeys)
-      if (i1<1 .or. i2<1) error stop 'monkey not found'
-      is(1) = monkey_ancestorof(monkeys(i1),name,monkeys)
-      is(2) = monkey_ancestorof(monkeys(i2),name,monkeys)
+      is(1) = monkey_ancestorof(this%op1_ptr, name)
+      is(2) = monkey_ancestorof(this%op2_ptr, name)
       isancestor = is(1) .or. is(2)
     end if
   end function monkey_ancestorof
 
 
-  recursive subroutine monkey_print(this,monkeys,lev)
+  recursive subroutine monkey_print(this,lev)
     class(monkey_t), intent(in) :: this
-    type(monkey_t), intent(in) :: monkeys(:)
     integer, intent(in), optional :: lev
 !
 ! Only print monkeys that depend on the HUMN monkey
 !
-    integer :: i, j, lev0
+    integer :: lev0
 
-    if (.not. monkey_ancestorof(this,HUMN,monkeys)) return
     lev0 = 0
     if (present(lev)) lev0 = lev
+    if (.not. monkey_ancestorof(this,HUMN)) return
 
     write(*,'(a)',advance='no') repeat('--',lev0)
     write(*,'(a,1x,a,1x,a," V=",i0)') &
     & this%name, this%opnames, this%val
     if (this%op==OP_VAL) return
 
-    do i=1,2
-      j = monkey_find(this%opnames(i), monkeys)
-      call monkey_print(monkeys(j),monkeys,lev0+1)
-    end do
+    call monkey_print(this%op1_ptr, lev0+1)
+    call monkey_print(this%op2_ptr, lev0+1)
   end subroutine monkey_print
 
 
-  recursive function monkey_expected(this, req, monkeys) result(val)
+  recursive function monkey_expected(this, req) result(val)
     class(monkey_t), intent(in) :: this
     integer(I8), intent(in) :: req
-    type(monkey_t), intent(in) :: monkeys(:)
     integer(I8) :: val
 
     integer :: i, m(2)
@@ -205,16 +207,13 @@ contains
     ! Assert this is an operator with only one 
     ! humn dependend operand
     if (this%op == OP_VAL) error stop 'expected - value not expected'
-    do i=1,2
-      m(i) = monkey_find(this%opnames(i), monkeys)
-      if (m(i)<1) error stop 'monkey not found'
-      ishumn(i) = monkey_ancestorof(monkeys(m(i)),HUMN,monkeys)
-    end do
+    ishumn(1) = monkey_ancestorof(this%op1_ptr, HUMN)
+    ishumn(2) = monkey_ancestorof(this%op2_ptr, HUMN)
     if (.not. xor(ishumn(1), ishumn(2))) error stop 'expected - not linear dependency'
 
     ! Inverse the operators
-    if (.not. ishumn(1)) a = monkey_eval(monkeys(m(1)),monkeys)
-    if (.not. ishumn(2)) b = monkey_eval(monkeys(m(2)),monkeys)
+    if (.not. ishumn(1)) a = monkey_eval(this%op1_ptr)
+    if (.not. ishumn(2)) b = monkey_eval(this%op2_ptr)
 
     if (this%name==ROOT) then
       ! Root is an "==" operator
@@ -228,8 +227,8 @@ contains
         if (ishumn(2)) req0 = req - a
 
       case(OP_MUL)
-        if (ishumn(1)) req0 = req / b
-        if (ishumn(2)) req0 = req / a
+        if (ishumn(1)) req0 = req .div. b
+        if (ishumn(2)) req0 = req .div. a
 
       case(OP_SUB)
         if (ishumn(1)) req0 = req + b
@@ -237,16 +236,24 @@ contains
 
       case(OP_DIV)
         if (ishumn(1)) req0 = req * b
-        if (ishumn(2)) req0 = a / req
+        if (ishumn(2)) req0 = a .div. req
 
       case default
-        error stop 'invalid operator'
+        error stop 'expected - invalid operator'
       end select
     end if
 
-    if (ishumn(1)) val = monkey_expected(monkeys(m(1)), req0, monkeys)
-    if (ishumn(2)) val = monkey_expected(monkeys(m(2)), req0, monkeys)
+    if (ishumn(1)) val = monkey_expected(this%op1_ptr, req0)
+    if (ishumn(2)) val = monkey_expected(this%op2_ptr, req0)
     
   end function monkey_expected
+
+
+  pure function integer_division(a,b) result(c)
+    integer(I8) :: c
+    integer(I8), intent(in) :: a, b
+    if (b==0 .or. mod(a,b)/=0) error stop 'division - result is not a whole number'
+    c = a/b
+  end function integer_division
 
 end module day2221_mod
