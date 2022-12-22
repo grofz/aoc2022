@@ -51,3 +51,19 @@ Solving Advent of Code 2022 in Fortran
     - calculate are in 3D-matrix of pores/rock/water
     - using Fortran matrices and functions
     - TODO: visualize the rock structure
+19. Not Enough Minerals
+    - optimize the order of spending resources on building robots
+    - recursive search / must not consider useless choices 
+20. Grove Positioning System
+    - "mixing" (moving elements in a circular list
+    - basic circular list implementation
+21. Monkey Math
+    - build tree of mathematical expressions
+    - collection of recursive functions to evaluate expression (Part 1) and inverse operations (Part 2)
+22. Monkey Map
+    - travel on cube surface
+    - fold cube from unfolded input
+    - maping from 2d to 3d coordinates to move between cube sides
+23. ?
+24. ?
+25. ?

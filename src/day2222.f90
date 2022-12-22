@@ -3,6 +3,7 @@ module day2222_mod
   implicit none
 
   integer, parameter :: DIR(2,4) = reshape([1,0, 0,1, -1,0, 0,-1], [2,4])
+  integer, parameter :: RIGH=1, DOWN=2, LEFT=3, UUPP=4
   character(len=1), parameter :: CHDIR(4)=['R','D','L','U']
   character(len=1), parameter :: CHWALL='#', CHOPEN='.'
 
@@ -10,7 +11,6 @@ module day2222_mod
     integer :: p(2)
     integer :: f
     character(len=1), pointer :: bb(:,:) => null()
-    integer, pointer :: movins(:,:) => null()
   contains
     procedure :: move => robot_move
     procedure :: turn => robot_turn
@@ -26,36 +26,43 @@ contains
 
     character(len=1), allocatable :: bb(:,:) 
     integer, allocatable :: movins(:,:)
-    type(robot_t) :: r
-    integer :: i, ans1
+    integer :: ans1, ans2
 
     call read_input(file, bb, movins)
     !call read_input('inp/22/test.txt', bb, movins)
-    r = robot_t(bb,movins)
-  print *, 'position', r%p
 
-    do i=1,size(movins,2)
-      call r%turn(movins(2,i))
-      call r%move(movins(1,i))
-    end do
-  print *, 'position+f', r%p, r%f
-  ans1 = 1000*r%p(2) + 4*r%p(1) + (r%f-1)
-  print *, ans1
+    call run(1,ans1)
+    call run(2,ans2)
+    print '("Answer 22/1 ",i0,l2)', ans1, 26558==ans1
+    print '("Answer 22/2 ",i0,l2)', ans2, 110400==ans2
 
+  contains
 
+    subroutine run(irule, ans)
+      integer, intent(in) :: irule
+      integer, intent(out) :: ans
+      type(robot_t) :: r
+      integer :: i
+
+      r = robot_t(bb)
+      do i=1,size(movins,2)
+        call r%turn(movins(2,i))
+        call r%move(movins(1,i), irule)
+      end do
+      print *, 'position and orinetation', r%p, r%f
+      ans = 1000*r%p(2) + 4*r%p(1) + (r%f-1)
+    end subroutine
 
   end subroutine day2222
 
 
-  type(robot_t) function robot_new(bb, movins) result(new)
+  type(robot_t) function robot_new(bb) result(new)
     character(len=1), intent(in), target :: bb(:,:) 
-    integer, intent(in), target :: movins(:,:)
 
     integer :: i
 
     new%bb => bb
-    new%movins => movins
-    new%f = 1 ! Facing right
+    new%f = RIGH 
     new%p(2) = 1
     do i=1, size(bb,1)
       if (bb(i,1)/=' ') exit
@@ -65,33 +72,53 @@ contains
   end function robot_new
 
 
-  subroutine robot_move(this, n)
+  subroutine robot_move(this, n, irule)
     class(robot_t), intent(inout) :: this
-    integer, intent(in) :: n
+    integer, intent(in) :: n, irule
 !
 ! Move safely "n" moves in current direction
 !
     character(len=1) :: next
-    integer :: i, pn(2)
+    integer :: i, pn(2), fn, nt
+
+    !real case
+    if (mod(size(this%bb,1),3) /= 0) error stop 'x not divisible by 4'
+    if (mod(size(this%bb,2), 4) /= 0) error stop 'y not divisible by 3'
+    nt = size(this%bb,1)/3
+    if (size(this%bb,2)/4 /= nt) error stop 'x/y ratio not 4/3'
+    !test case
+    !if (mod(size(this%bb,1),4) /= 0) error stop 'x not divisible by 4'
+    !if (mod(size(this%bb,2), 3) /= 0) error stop 'y not divisible by 3'
+    !nt = size(this%bb,1)/4
+    !if (size(this%bb,2)/3 /= nt) error stop 'x/y ratio not 4/3'
 
     do i=1,n
-      pn = position_ngb(this%p, DIR(:,this%f), this%bb) 
+      select case(irule)
+      case(1)
+        pn = position_ngb(this%p, DIR(:,this%f), this%bb) 
+        fn = this%f
+      case(2)
+        call cube_position(this%p, this%f, pn, fn, nt)
+      case default
+        error stop 'move - invalid rule'
+      end select
       if (this%bb(pn(1),pn(2))==CHWALL) exit
       this%p = pn
+      this%f = fn
     end do
-print *, 'new position =',this%p
-  end subroutine
+!print *, 'new position/orientation=',this%p,this%f
+  end subroutine robot_move
 
 
   subroutine robot_turn(this, turn)
     class(robot_t), intent(inout) :: this
     integer, intent(in) :: turn
 
-    if (abs(turn)>1) error stop 'too many turns'
+    if (abs(turn)>1) error stop 'turn - too many turns'
     this%f = this%f + turn
     if (this%f==5) this%f = 1
     if (this%f==0) this%f = 4
-print *, 'new orientation =',this%f
+!print *, 'new orientation =',this%f
   end subroutine robot_turn
 
 
@@ -157,7 +184,8 @@ print *, 'new orientation =',this%f
       movins(2,nturn+1) = lastturn
     end associate
 
-    print *, nx, ny, size(movins,2)
+    print '("Problem size: nx=",i0,"  ny=",i0,"  moves=",i0)',&
+    & nx, ny, size(movins,2)
   end subroutine read_input
 
 
@@ -185,21 +213,26 @@ print *, 'new orientation =',this%f
   end function position_ngb
 
 
-  subroutine cube_position(p0, p1, nt, cp, f)
-    integer, intent(out) :: cp(3)
-    integer, intent(inout) :: f
-    integer, intent(in) :: p0(2), p1(2), nt
+  subroutine cube_position(p0, f0, p, f, nt)
+    integer, intent(in) :: p0(2), f0, nt
+    integer, intent(out) :: p(2), f
 
-    integer :: leto(2,6), ribo(2,6), i, cp0(3)
+    integer :: leto(2,6), i, cp0(3), cp(3)
 
-    leto(:,1) = [2*nt+1, 1]
-    leto(:,2) = [1, nt+1]
+    ! real case
+    leto(:,1) = [nt+1, 1]
+    leto(:,2) = [2*nt+1, 1]
     leto(:,3) = [nt+1, nt+1]
-    leto(:,4) = [2*nt+1, nt+1]
-    leto(:,5) = [2*nt+1, 2*nt+1]
-    leto(:,6) = [3*nt+1, 2*nt+1]
-    ribo(1,:) = leto(1,:) + nt - 1
-    ribo(2,:) = leto(2,:) + nt - 1
+    leto(:,4) = [1, 2*nt+1]
+    leto(:,5) = [nt+1, 2*nt+1]
+    leto(:,6) = [1, 3*nt+1]
+    ! test case
+    !leto(:,1) = [2*nt+1, 1]
+    !leto(:,2) = [1, nt+1]
+    !leto(:,3) = [nt+1, nt+1]
+    !leto(:,4) = [2*nt+1, nt+1]
+    !leto(:,5) = [2*nt+1, 2*nt+1]
+    !leto(:,6) = [3*nt+1, 2*nt+1]
 
     do i=1,6
       cp0(3) = i
@@ -210,117 +243,145 @@ print *, 'new orientation =',this%f
     end do
     if (i==6+1) error stop 'position cp0 not valid'
 
+    p = p0 + DIR(:,f0)
+    f = f0
     do i=1,6
       cp(3) = i
-      cp(1) = p1(1) - leto(1,i) + 1
-      cp(2) = p1(2) - leto(2,i) + 1
+      cp(1) = p(1) - leto(1,i) + 1
+      cp(2) = p(2) - leto(2,i) + 1
       if (cp(1)<1 .or. cp(1)>nt .or. cp(2)<1 .or. cp(2)>nt) cycle
       exit
     end do
 
-    ! p1 is outside "map"
+    ! If "p" is outside "map", switch to another side
     if (i==6+1) then
       select case(cp0(3))
       case(1)
-        if (f==4) then ! up
-          cp(1) = nt - cp0(1) + 1
-          cp(2) = 1
-          cp(3) = 2
-          f = 2 ! now down
-        else if (f==3) then ! left
-          cp(1) = cp0(2)
-          cp(2) = 1
-          cp(3) = 3
-          f = 2 ! now down
-        else if (f==1) then ! right
-          cp(1) = nt
-          cp(2) = nt - cp0(2) + 1
-          cp(3) = 6
-          f = 3 ! now left
+       !if (f==UUPP) then
+       !  cp = [nt-cp0(1)+1, 1, 2]
+       !  f = DOWN
+       !else if (f==LEFT) then
+       !  cp = [cp0(2), 1, 3]
+       !  f = DOWN
+       !else if (f==RIGH) then
+       !  cp = [nt, nt-cp0(2)+1, 6]
+       !  f = LEFT
+       !end if
+        if (f==LEFT) then
+          cp = [1, nt-cp0(2)+1, 4]
+          f = RIGH
+        else if (f==UUPP) then
+          cp = [1, cp0(1), 6]
+          f = RIGH
         else
           error stop 'face 1 out of range'
         end if
+
       case(2)
-        if (f==4) then ! up
-          cp(1) = nt - cp0(1) + 1
-          cp(2) = 1
-          cp(3) = 1
-          f = 2
-        else if (f==2) then ! down
-          cp(1) = nt - cp0(1) + 1
-          cp(2) = nt
-          cp(3) = 5
-          f = 4
-        else if (f==3) then ! left
-          cp(1) = nt - cp0(2) + 1
-          cp(2) = nt
-          cp(3) = 6
-          f = 4
+       !if (f==UUPP) then
+       !  cp = [nt-cp0(1)+1, 1, 1]
+       !  f = DOWN
+       !else if (f==DOWN) then 
+       !  cp = [nt-cp0(1)+1, nt, 5]
+       !  f = UUPP
+       !else if (f==LEFT) then 
+       !  cp = [nt-cp0(2)+1, nt, 6]
+       !  f = UUPP
+       !end if
+        if (f==UUPP) then
+          cp = [cp0(1), nt, 6]
+          f = UUPP
+        else if (f==RIGH) then
+          cp = [nt, nt-cp0(2)+1, 5]
+          f = LEFT
+        else if (f==DOWN) then
+          cp = [nt, cp0(1), 3]
+          f = LEFT
         else
           error stop 'face 2 out of range'
         end if
+
       case(3)
-        if (f==4) then
-          ! "3" => "1"
-          cp(1) = 1
-          cp(2) = cp0(1)
-          cp(3) = 1
-          f = 1
-        else if (f==2) then
-          ! "3" => "5"
-          cp(1) = 1
-          cp(2) = nt - cp0(1) + 1
-          cp(3) = 5
-          f = 1
+       !if (f==UUPP) then
+       !  cp = [1, cp0(1), 1]
+       !  f = RIGH
+       !else if (f==DOWN) then
+       !  cp = [1, nt-cp0(1)+1, 5]
+       !  f = RIGH
+       !else
+       !  error stop 'face 3 out of range'
+       !end if
+        if (f==LEFT) then
+          cp = [cp0(2), 1, 4]
+          f = DOWN
+        else if (f==RIGH) then
+          cp = [cp0(2), nt, 2]
+          f = UUPP
         else
           error stop 'face 3 out of range'
         end if
+
       case(4)
-        ! "4" => "6"
-        if (f/=1) error stop 'face 4 out of range'
-        cp(1) = nt - cp0(2) + 1
-        cp(2) = 1
-        cp(3) = 6
-        f = 2
+       !if (f /= RIGH) error stop 'face 4 out of range'
+       !cp(1) = nt - cp0(2) + 1
+       !cp(2) = 1
+       !cp(3) = 6
+       !f = DOWN
+        if (f==UUPP) then
+          cp = [1, cp0(1), 3]
+          f = RIGH
+        else if (f==LEFT) then
+          cp = [1, nt-cp0(2)+1, 1]
+          f = RIGH
+        else
+          error stop 'face 4 out of range'
+        end if
+
       case(5)
-        if (f==3) then
-        ! "5" => "3"
-          cp(1) = nt - cp0(2) + 1
-          cp(2) = nt
-          cp(3) = 3
-          f = 4
-        else if (f==2) then
-        ! "5" => "2"
-          cp(1) = nt - cp0(1) + 1
-          cp(2) = nt
-          cp(3) = 2
-          f = 4
+       !if (f==LEFT) then
+       !  cp = [nt-cp0(2)+1, nt, 3]
+       !  f = UUPP
+       !else if (f==DOWN) then
+       !  cp = [nt-cp0(1)+1, nt, 2]
+       !  f = UUPP
+       !end if
+        if (f==RIGH) then
+          cp = [nt, nt-cp0(2)+1, 2]
+          f = LEFT
+        else if (f==DOWN) then
+          cp = [nt, cp0(1), 6]
+          f = LEFT
         else
           error stop 'face 5 out of range'
         end if
+
       case(6)
-        if (f==4) then ! up
-          cp(1) = nt
-          cp(2) = nt - cp0(1) + 1
-          cp(3) = 4
-          f = 3 ! now left
-        else if (f==1) then ! right
-          cp(1) = nt
-          cp(2) = nt - cp0(2) + 1
-          cp(3) = 1
-          f = 3 ! now left
-        else if (f==2) then ! down
-          cp(1) = 1
-          cp(2) = nt - cp0(1) + 1
-          cp(3) = 2
-          f = 1 ! now right
+       !if (f==UUPP) then
+       !  cp = [nt, nt-cp0(1)+1, 4]
+       !  f = LEFT
+       !else if (f==RIGH) then
+       !  cp = [nt, nt-cp0(2)+1, 1]
+       !  f = LEFT
+       !else if (f==DOWN) then 
+       !  cp = [1, nt-cp0(1)+1, 2]
+       !  f = RIGH
+       !end if
+        if (f==RIGH) then
+          cp = [cp0(2), nt, 5]
+          f = UUPP
+        else if (f==LEFT) then
+          cp = [cp0(2), 1, 1]
+          f = DOWN
+        else if (f==DOWN) then
+          cp = [cp0(1), 1, 2]
+          f = DOWN
         else
           error stop 'face 6 out of range'
         end if
       end select
+
+      p = leto(:,cp(3)) + [cp(1), cp(2)] - 1
     end if
-
-
   end subroutine cube_position
 
 
