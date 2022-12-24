@@ -64,6 +64,10 @@ Solving Advent of Code 2022 in Fortran
     - travel on cube surface
     - fold cube from unfolded input
     - maping from 2d to 3d coordinates to move between cube sides
-23. ?
-24. ?
+23. Unstable Diffusion
+    - game of life algorithm with a rotating set of rules
+    - visualization?
+24. BLizzard Basin
+    - search path in a maze (2D + time)
+    - Djikstra saves the day
 25. ?
