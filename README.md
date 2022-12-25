@@ -70,4 +70,5 @@ Solving Advent of Code 2022 in Fortran
 24. BLizzard Basin
     - search path in a maze (2D + time)
     - Djikstra saves the day
-25. ?
+25. Full of Hot Air
+    - conversion between pentary numbers
